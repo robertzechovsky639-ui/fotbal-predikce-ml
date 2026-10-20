@@ -217,7 +217,7 @@ function paintListNow(ids) {
   if (visKey() !== S.vis) { render(); return; }
   let missing = false;
   for (const id of ids) {
-    const m = ST.byId[id]; if (!m) continue;
+    const m = ST.byId[id]; if (!m || !Fotbal.listVisible(m, S)) continue;
     const el = document.querySelector('.m[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
     if (!el) { missing = true; continue; }
     if (!patchCard(el, m)) {

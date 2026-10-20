@@ -351,6 +351,22 @@
     return hits[0] || null;
   }
   function priorOf(region) { return REGION_BASE[region] || 1450; }
+  function listVisible(m, ui) {
+    if (!m || !ui) return false;
+    const fav = ui.fav;
+    const hasFav = !!(fav && (typeof fav.has === 'function' ? fav.has(m.id) : fav.indexOf(m.id) >= 0));
+    if (ui.view === 'oblibene') return hasFav;
+    if (ui.view !== 'zapasy') return false;
+    const day = ui.day || 0;
+    if (!(m.day === day || (day === 0 && m.status === 'live'))) return false;
+    if (ui.reg === 'focus' && m.region !== 'europe_top' && m.region !== 'czech' && m.region !== 'europe_cups') return false;
+    if (ui.reg && ui.reg !== 'all' && ui.reg !== 'focus' && m.region !== ui.reg) return false;
+    if (ui.filt === 'live' && m.status !== 'live') return false;
+    if (ui.filt === 'up' && m.status !== 'upcoming') return false;
+    if (ui.filt === 'fin' && m.status !== 'finished') return false;
+    if (ui.favOnly && !hasFav) return false;
+    return true;
+  }
 
   function ensurePred(m, ctx) {
     if (m.pred && m.pred.h != null && m.pred.d != null && m.pred.a != null) return m;
@@ -387,7 +403,7 @@
 
   return {
     setRules, canon, codeOf, clubId, scoreMatrix, markets, liveMarkets, remaining, eloLambdas,
-    applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf,
+    applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf, listVisible,
     parseEspnEvent, parseSofaEvent, parseSofaIncidents, parseSofaOdds, parse365, orient, alignUpdate, espnMinute, sofaMinute,
   };
 });

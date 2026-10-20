@@ -94,7 +94,13 @@ assert.strictEqual(flipped.hg, 1);
 assert.strictEqual(flipped.ag, 0);
 
 const sw = fs.readFileSync(path.join(__dirname, '../web/sw.js'), 'utf8');
-assert.ok(sw.includes("fotbal-v2"), 'verze cache');
+assert.ok(sw.includes("fotbal-v3"), 'verze cache');
+const js = fs.readFileSync(path.join(__dirname, '../web/static.js'), 'utf8');
+assert.ok(!/const ymd = ymd\(/.test(js), 'ESPN datum nesmí stínit funkci ymd');
+const ui = { view: 'zapasy', day: 0, reg: 'focus', filt: 'live', favOnly: false, fav: [] };
+assert.strictEqual(F.listVisible({ id: 'sofa:9', region: 'asia', status: 'live', day: 0 }, ui), false);
+assert.strictEqual(F.listVisible({ id: 'espn:2', region: 'europe_cups', status: 'live', day: 0 }, ui), true);
+assert.strictEqual(F.listVisible({ id: 'espn:3', region: 'europe_cups', status: 'finished', day: 0 }, ui), false);
 
 const held = { status: 'live', hg: 1, ag: 0, minute: 60, period: 2, reds: [0, 0], pred: { h: 0.55, d: 0.25, a: 0.2 }, lam: [1.4, 1.1], teams: [{ name: 'Arsenal' }, { name: 'Chelsea' }] };
 F.liveCalc(held);

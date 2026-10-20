@@ -165,17 +165,22 @@ async function srcEspn(changed, token) {
   const batch = [];
   for (let i = 0; i < 5; i++) batch.push(slugs[(espnCursor + i) % slugs.length]);
   espnCursor = (espnCursor + 5) % slugs.length;
-  const ymd = ymd(0);
+  const stamp = ymd(0);
+  let ok = 0;
   await Promise.all(batch.map(async slug => {
-    const d = await j('https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard?dates=' + ymd);
-    for (const ev of d.events || []) {
-      const partial = Fotbal.parseEspnEvent(ev);
-      if (!partial || women(partial.homeName) || women(partial.awayName)) continue;
-      partial.league = slug;
-      const id = upsert(partial, token);
-      if (id) changed.add(id);
-    }
+    try {
+      const d = await j('https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard?dates=' + stamp);
+      ok++;
+      for (const ev of d.events || []) {
+        const partial = Fotbal.parseEspnEvent(ev);
+        if (!partial || women(partial.homeName) || women(partial.awayName)) continue;
+        partial.league = slug;
+        const id = upsert(partial, token);
+        if (id) changed.add(id);
+      }
+    } catch (e) {}
   }));
+  if (!ok) throw new Error('espn');
 }
 async function sofaDetail(onChange) {
   let i = 0;
