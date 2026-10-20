@@ -1,0 +1,42 @@
+{
+  "id": 16938875,
+  "startTimestamp": 1792522800,
+  "status": {
+    "code": 6,
+    "description": "1st half",
+    "type": "inprogress"
+  },
+  "time": {
+    "currentPeriodStartTimestamp": 1792522808,
+    "initial": 0,
+    "max": 2700,
+    "extra": 540
+  },
+  "homeScore": {
+    "current": 1,
+    "display": 1,
+    "period1": 1,
+    "normaltime": 1
+  },
+  "awayScore": {
+    "current": 0,
+    "display": 0,
+    "period1": 0,
+    "normaltime": 0
+  },
+  "lastPeriod": "period1",
+  "homeTeam": {
+    "name": "AS Roma",
+    "id": 2702
+  },
+  "awayTeam": {
+    "name": "ŠK Slovan Bratislava",
+    "id": 2404
+  },
+  "tournament": {
+    "name": "UEFA Champions League",
+    "category": {
+      "name": "Europe"
+    }
+  }
+}

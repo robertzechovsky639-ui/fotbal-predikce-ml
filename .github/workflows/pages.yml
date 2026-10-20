@@ -1,0 +1,65 @@
+name: Predikce -> GitHub Pages
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  actions: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Obnovit poslední state.json
+        uses: actions/cache/restore@v4
+        with:
+          path: data/online-cache
+          key: model-last-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            model-last-
+      - name: Model z release, jinak záloha z repa
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if [ -f data/online-cache/state.json ]; then mkdir -p data/online && cp data/online-cache/state.json data/online/state.json; fi
+          python scripts/fetch_release.py
+      - run: python scripts/export_static.py
+      - run: python scripts/check_predictions.py dist/data/matches.json
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist }
+      - name: Uložit zálohu state.json
+        id: save_cache
+        if: success()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/online-cache
+          key: model-last-${{ github.run_id }}-${{ github.run_attempt }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
+  keepalive:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - env: { GH_TOKEN: "${{ github.token }}", R: "${{ github.repository }}", ME: "${{ github.run_id }}" }
+        run: |
+          sleep 480
+          newer=$(gh run list -R "$R" -w pages.yml -L 5 --json databaseId,createdAt --jq "[.[]|select(.databaseId > $ME)]|length")
+          if [ "$newer" -gt 0 ]; then echo "mezitím začal jiný běh – bez zálohy"; else gh workflow run pages.yml -R "$R"; echo "spuštěn další export"; fi

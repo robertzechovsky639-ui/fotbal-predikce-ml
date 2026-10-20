@@ -1,0 +1,39 @@
+name: Učení modelu (denně)
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: learn
+  cancel-in-progress: false
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Historická data (cache)
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: fotbal-raw-${{ github.run_number }}
+          restore-keys: fotbal-raw-
+      - run: python scripts/download_data.py
+      - name: Předchozí model, když release existuje
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: python scripts/fetch_release.py || true
+      - name: Přetrénování s bránou kvality
+        run: python backend/retrain.py
+      - name: Publikace modelu (jen learn, export ho nepřepisuje)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cd data/model && tar czf ../../model.tar.gz gbm.txt dc.json elo_state.json metrics.json && cd ../..
+          gh release view model -R "${{ github.repository }}" >/dev/null 2>&1 || gh release create model -R "${{ github.repository }}" --title model --notes "fotbal model"
+          gh release upload model model.tar.gz --clobber -R "${{ github.repository }}"
+          gh workflow run pages.yml -R "${{ github.repository }}"

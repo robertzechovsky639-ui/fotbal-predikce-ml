@@ -1,0 +1,629 @@
+{
+  "split": "trénink < 2025-07-01, test ≥ 2025-07-01 (kandidát; ostrý refit není v těchto číslech)",
+  "test": {
+    "blend": {
+      "n": 19451,
+      "accuracy": 0.5001799393347386,
+      "log_loss": 1.0129580953466681,
+      "rps": 0.20695439493061799
+    },
+    "lightgbm": {
+      "n": 19451,
+      "accuracy": 0.5001799393347386,
+      "log_loss": 1.0129580953466681,
+      "rps": 0.20695439493061799
+    },
+    "elo": {
+      "n": 19451,
+      "accuracy": 0.48537350264767876,
+      "log_loss": 1.0295574135254357,
+      "rps": 0.21223932708730062
+    },
+    "baseline": {
+      "n": 19451,
+      "accuracy": 0.44321628708035576,
+      "log_loss": 1.0720366198425115,
+      "rps": 0.2271478881052894
+    },
+    "dixon": {
+      "n": 15568,
+      "accuracy": 0.4744347379239466,
+      "log_loss": 1.0364565161227974,
+      "rps": 0.21389406655178916
+    }
+  },
+  "by_region": {
+    "europe_top": {
+      "blend": {
+        "n": 2862,
+        "accuracy": 0.5352900069881202,
+        "log_loss": 0.9711544620317695,
+        "rps": 0.19438607342000033
+      },
+      "lightgbm": {
+        "n": 2862,
+        "accuracy": 0.5352900069881202,
+        "log_loss": 0.9711544620317695,
+        "rps": 0.19438607342000033
+      },
+      "elo": {
+        "n": 2862,
+        "accuracy": 0.5153738644304682,
+        "log_loss": 0.9994686399437255,
+        "rps": 0.20374437048937666
+      },
+      "baseline": {
+        "n": 2862,
+        "accuracy": 0.4339622641509434,
+        "log_loss": 1.0758287997931815,
+        "rps": 0.23024607283763138
+      }
+    },
+    "europe_lower": {
+      "blend": {
+        "n": 12167,
+        "accuracy": 0.4931371743239911,
+        "log_loss": 1.0179289539286402,
+        "rps": 0.2077185214886134
+      },
+      "lightgbm": {
+        "n": 12167,
+        "accuracy": 0.4931371743239911,
+        "log_loss": 1.0179289539286402,
+        "rps": 0.2077185214886134
+      },
+      "elo": {
+        "n": 12167,
+        "accuracy": 0.4757951836935974,
+        "log_loss": 1.0368567265302988,
+        "rps": 0.21366438779187383
+      },
+      "baseline": {
+        "n": 12167,
+        "accuracy": 0.4399605490260541,
+        "log_loss": 1.0738662132920995,
+        "rps": 0.22670369594247355
+      }
+    },
+    "czech": {
+      "blend": {
+        "n": 71,
+        "accuracy": 0.5352112676056338,
+        "log_loss": 1.0043553976146902,
+        "rps": 0.21074703815376733
+      },
+      "lightgbm": {
+        "n": 71,
+        "accuracy": 0.5352112676056338,
+        "log_loss": 1.0043553976146902,
+        "rps": 0.21074703815376733
+      },
+      "elo": {
+        "n": 71,
+        "accuracy": 0.5352112676056338,
+        "log_loss": 0.9925184303375044,
+        "rps": 0.2122762294145006
+      },
+      "baseline": {
+        "n": 71,
+        "accuracy": 0.4507042253521127,
+        "log_loss": 1.0649337624548012,
+        "rps": 0.23713414299866967
+      }
+    },
+    "europe_cups": {
+      "blend": {
+        "n": 619,
+        "accuracy": 0.529886914378029,
+        "log_loss": 1.0020011967361389,
+        "rps": 0.22185967985388536
+      },
+      "lightgbm": {
+        "n": 619,
+        "accuracy": 0.529886914378029,
+        "log_loss": 1.0020011967361389,
+        "rps": 0.22185967985388536
+      },
+      "elo": {
+        "n": 619,
+        "accuracy": 0.5121163166397416,
+        "log_loss": 1.006936769104159,
+        "rps": 0.22309943225821827
+      },
+      "baseline": {
+        "n": 619,
+        "accuracy": 0.481421647819063,
+        "log_loss": 1.0491337407363195,
+        "rps": 0.23679792595020335
+      }
+    },
+    "asia": {
+      "blend": {
+        "n": 598,
+        "accuracy": 0.4983277591973244,
+        "log_loss": 1.023051238050516,
+        "rps": 0.20939561212026314
+      },
+      "lightgbm": {
+        "n": 598,
+        "accuracy": 0.4983277591973244,
+        "log_loss": 1.023051238050516,
+        "rps": 0.20939561212026314
+      },
+      "elo": {
+        "n": 598,
+        "accuracy": 0.5050167224080268,
+        "log_loss": 1.0187420170944477,
+        "rps": 0.20898284528689187
+      },
+      "baseline": {
+        "n": 598,
+        "accuracy": 0.451505016722408,
+        "log_loss": 1.0679075317700637,
+        "rps": 0.22664109903448873
+      }
+    },
+    "south_america": {
+      "blend": {
+        "n": 1993,
+        "accuracy": 0.48319116909182136,
+        "log_loss": 1.0287583230627722,
+        "rps": 0.20954680043918225
+      },
+      "lightgbm": {
+        "n": 1993,
+        "accuracy": 0.48319116909182136,
+        "log_loss": 1.0287583230627722,
+        "rps": 0.20954680043918225
+      },
+      "elo": {
+        "n": 1993,
+        "accuracy": 0.48419468138484695,
+        "log_loss": 1.0339665038734942,
+        "rps": 0.21071479456396092
+      },
+      "baseline": {
+        "n": 1993,
+        "accuracy": 0.45659809332664325,
+        "log_loss": 1.0666806519907353,
+        "rps": 0.22227222861840448
+      }
+    },
+    "other": {
+      "blend": {
+        "n": 1141,
+        "accuracy": 0.49956178790534617,
+        "log_loss": 1.0383999189961877,
+        "rps": 0.2162017632373349
+      },
+      "lightgbm": {
+        "n": 1141,
+        "accuracy": 0.49956178790534617,
+        "log_loss": 1.0383999189961877,
+        "rps": 0.2162017632373349
+      },
+      "elo": {
+        "n": 1141,
+        "accuracy": 0.4864154250657318,
+        "log_loss": 1.0397375759845189,
+        "rps": 0.2168270540464017
+      },
+      "baseline": {
+        "n": 1141,
+        "accuracy": 0.45223488168273446,
+        "log_loss": 1.0674011606977805,
+        "rps": 0.22703862696474636
+      }
+    }
+  },
+  "international": {
+    "elo": {
+      "n": 1396,
+      "accuracy": 0.5709169054441261,
+      "log_loss": 0.9398583507777494,
+      "rps": 0.19205491063824942
+    },
+    "baseline": {
+      "n": 1396,
+      "accuracy": 0.47492836676217765,
+      "log_loss": 1.0506960272519923,
+      "rps": 0.23074370081509082
+    }
+  },
+  "coverage": {
+    "asia": {
+      "matches": 10700,
+      "n_leagues": 28,
+      "leagues": [
+        "Australia | A-League 2018/19",
+        "Australia | A-League 2019/20",
+        "Australia | A-League 2020/21",
+        "Australia | A-League 2021/22",
+        "Australia | A-League 2022/23",
+        "Australia | A-League 2023/24",
+        "Australia | A-League 2024/25",
+        "China | Super League 2018",
+        "China | Super League 2019",
+        "China | Super League 2020",
+        "China | Super League 2021",
+        "China | Super League 2022",
+        "China | Super League 2023",
+        "China | Super League 2024",
+        "China | Super League 2025",
+        "J1 League",
+        "Japan | J1 League 2019",
+        "Japan | J1 League 2020",
+        "Japan | J1 League 2021",
+        "Japan | J1 League 2022",
+        "Japan | J1 League 2023",
+        "Japan | J1 League 2024",
+        "Japan | J1 League 2025",
+        "Kazakhstan | Premier League 2023",
+        "Kazakhstan | Premier League 2024",
+        "Kazakhstan | Premier League 2025",
+        "Saudi Arabia Saudi Professional League 2024/25",
+        "Super League"
+      ],
+      "sources": [
+        "football-data-new",
+        "openfootball"
+      ],
+      "from": "2012-03-10",
+      "to": "2026-10-18"
+    },
+    "czech": {
+      "matches": 1515,
+      "n_leagues": 3,
+      "leagues": [
+        "Chance Liga",
+        "Czech Republic Cup 2024/25",
+        "Česká národní liga"
+      ],
+      "sources": [
+        "openfootball"
+      ],
+      "from": "2018-07-20",
+      "to": "2026-09-20"
+    },
+    "europe_cups": {
+      "matches": 4244,
+      "n_leagues": 3,
+      "leagues": [
+        "Evropská liga",
+        "Konferenční liga",
+        "Liga mistrů"
+      ],
+      "sources": [
+        "openfootball"
+      ],
+      "from": "2011-09-13",
+      "to": "2026-05-30"
+    },
+    "europe_lower": {
+      "matches": 230586,
+      "n_leagues": 181,
+      "leagues": [
+        "2. Bundesliga",
+        "African Football League 2023",
+        "Albania Super League 2023/24",
+        "Albania Super League 2024/25",
+        "Algeria | Ligue 1 2023/24",
+        "Algeria | Ligue 1 2024/25",
+        "Allsvenskan",
+        "Andorra Premier Division 2023/24",
+        "Andorra Premier Division 2024/25",
+        "Armenia Premier League 2023/24",
+        "Armenia Premier League 2024/25",
+        "Azerbaijan Premier League A 2023/24",
+        "Azerbaijan Premier League A 2024/25",
+        "Belarus Premier League 2023",
+        "Belarus Premier League 2024",
+        "Belarus Premier League 2025",
+        "Bosnia and Herzegovina Cup 2024/25",
+        "Bosnia and Herzegovina Premier Liga 2023/24",
+        "Bosnia and Herzegovina Premier Liga 2024/25",
+        "Bulgaria Cup 2024/25",
+        "Bulgaria Premier League 2023/24",
+        "Bulgaria Premier League 2024/25",
+        "Bundesliga",
+        "Challenge League",
+        "Championship",
+        "Croatia HNL 2023/24",
+        "Croatia HNL 2024/25",
+        "Cyprus Cypriot Cup 2024/25",
+        "Cyprus First Division 2023/24",
+        "Cyprus First Division 2024/25",
+        "Denmark Landspokalturneringen 2024/25",
+        "Egypt | Premiership 2023/24",
+        "Egypt | Premiership 2024/25",
+        "Ekstraklasa",
+        "Eliteserien",
+        "Estonia Meistriliiga 2023",
+        "Estonia Meistriliiga 2024",
+        "Estonia Meistriliiga 2025",
+        "Faroe Islands Premier Division 2023",
+        "Faroe Islands Premier Division 2024"
+      ],
+      "sources": [
+        "football-data",
+        "football-data-new",
+        "openfootball"
+      ],
+      "from": "1993-07-28",
+      "to": "2026-10-19"
+    },
+    "europe_top": {
+      "matches": 78865,
+      "n_leagues": 7,
+      "leagues": [
+        "Bundesliga",
+        "Eredivisie",
+        "La Liga",
+        "Ligue 1",
+        "Premier League",
+        "Primeira Liga",
+        "Serie A"
+      ],
+      "sources": [
+        "football-data"
+      ],
+      "from": "1993-07-23",
+      "to": "2026-10-19"
+    },
+    "international": {
+      "matches": 31197,
+      "n_leagues": 156,
+      "leagues": [
+        "ABCS Tournament",
+        "AFC Asian Cup",
+        "AFC Asian Cup qualification",
+        "AFC Challenge Cup",
+        "AFC Challenge Cup qualification",
+        "AFC Solidarity Cup",
+        "AFF Championship",
+        "AFF Championship qualification",
+        "ASEAN Championship",
+        "ASEAN Championship qualification",
+        "African Cup of Nations",
+        "African Cup of Nations qualification",
+        "Afro-Asian Games",
+        "Al Ain International Cup",
+        "Amílcar Cabral Cup",
+        "Arab Cup",
+        "Arab Cup qualification",
+        "Asian Games",
+        "Atlantic Heritage Cup",
+        "Baltic Cup",
+        "Bangabandhu Cup",
+        "Benedikt Fontana Cup",
+        "CAFA Nations Cup",
+        "CECAFA Cup",
+        "CFU Caribbean Cup",
+        "CFU Caribbean Cup qualification",
+        "CONCACAF Nations League",
+        "CONCACAF Nations League qualification",
+        "CONCACAF Series",
+        "CONIFA Africa Football Cup",
+        "CONIFA Asia Cup",
+        "CONIFA European Football Cup",
+        "CONIFA South America Football Cup",
+        "CONIFA World Cup qualification",
+        "CONIFA World Football Cup",
+        "CONIFA World Football Cup qualification",
+        "COSAFA Cup",
+        "COSAFA Cup qualification",
+        "CTFA International Tournament",
+        "Canadian Shield"
+      ],
+      "sources": [
+        "martj42"
+      ],
+      "from": "1993-01-01",
+      "to": "2026-10-06"
+    },
+    "other": {
+      "matches": 18859,
+      "n_leagues": 34,
+      "leagues": [
+        "Ascenso MX 2010/11",
+        "Ascenso MX 2011/12",
+        "Ascenso MX 2012/13",
+        "Ascenso MX 2013/14",
+        "Ascenso MX 2014/15",
+        "Ascenso MX 2015/16",
+        "Ascenso MX 2016/17",
+        "Ascenso MX 2017/18",
+        "Ascenso MX 2018/19",
+        "Ascenso MX 2019/20",
+        "Costa Rica Primera División 2024/25",
+        "Liga MX",
+        "Liga MX 2010/11",
+        "Liga MX 2011/12",
+        "Liga MX 2012/13",
+        "Liga MX 2013/14",
+        "Liga MX 2014/15",
+        "Liga MX 2015/16",
+        "Liga MX 2016/17",
+        "Liga MX 2017/18",
+        "Liga MX 2018/19",
+        "Liga MX 2019/20",
+        "Liga MX 2020/21",
+        "Liga MX 2021/22",
+        "Liga MX 2022/23",
+        "Liga MX 2023/24",
+        "Liga MX 2024/25",
+        "Liga de Expansión MX 2020/21",
+        "Liga de Expansión MX 2021/22",
+        "Liga de Expansión MX 2022/23",
+        "Liga de Expansión MX 2023/24",
+        "Liga de Expansión MX 2024/25",
+        "MLS",
+        "South Africa Premier League 2024/25"
+      ],
+      "sources": [
+        "football-data-new",
+        "openfootball"
+      ],
+      "from": "2010-07-17",
+      "to": "2026-10-19"
+    },
+    "south_america": {
+      "matches": 24007,
+      "n_leagues": 36,
+      "leagues": [
+        "Argentina Primera Division 2018/19",
+        "Argentina Primera Division 2019/20",
+        "Argentina Primera Division 2020",
+        "Argentina Primera Division 2021",
+        "Argentina Primera Division 2022",
+        "Argentina Primera Division 2023",
+        "Argentina Primera Division 2024",
+        "Argentina Primera Division 2025",
+        "Brasileiro Série A 2018",
+        "Brasileiro Série A 2019",
+        "Brasileiro Série A 2020",
+        "Brasileiro Série A 2021",
+        "Brasileiro Série A 2022",
+        "Brasileiro Série A 2023",
+        "Brasileiro Série A 2024",
+        "Brasileiro Série A 2025",
+        "Brasileiro Série A 2026",
+        "Brasileiro Série B 2018",
+        "Brasileiro Série B 2019",
+        "Brasileiro Série B 2020",
+        "Brasileiro Série B 2021",
+        "Brasileiro Série B 2022",
+        "Brasileiro Série B 2023",
+        "Brasileiro Série B 2024",
+        "Brasileiro Série B 2025",
+        "Colombia Primera A 2023",
+        "Colombia Primera A 2024",
+        "Colombia Primera A 2025",
+        "Copa De La Liga Profesional",
+        "Copa Libertadores",
+        "Copa Sudamericana",
+        "Copa do Brasil 2025",
+        "Ecuador Serie A 2025",
+        "Liga Profesional",
+        "Paraguay Primera Division 2025",
+        "Serie A"
+      ],
+      "sources": [
+        "football-data-new",
+        "openfootball"
+      ],
+      "from": "2012-01-24",
+      "to": "2027-12-23"
+    }
+  },
+  "gate": {
+    "ok": true,
+    "reason": "brána prošla"
+  },
+  "history": [
+    {
+      "at": "2026-10-20T19:24:41Z",
+      "holdout_n": 19378,
+      "candidate": {
+        "log_loss": 1.0121558529202386,
+        "rps": 0.20675169359673423
+      },
+      "published": true,
+      "reason": "brána prošla"
+    },
+    {
+      "at": "2026-10-20T19:36:44Z",
+      "holdout_n": 19451,
+      "candidate": {
+        "log_loss": 1.0129580953466681,
+        "rps": 0.20695439493061799
+      },
+      "published": true,
+      "reason": "brána prošla"
+    }
+  ],
+  "elo_params": {
+    "ha": 50,
+    "coef": 0.75,
+    "base_h": 1.48,
+    "base_a": 1.18
+  },
+  "blend_w": 1.0,
+  "features": [
+    "elo_diff",
+    "elo_h",
+    "elo_a",
+    "elo_exp",
+    "dc_lh",
+    "dc_la",
+    "dc_ph",
+    "dc_pd",
+    "dc_pa",
+    "f5_gf",
+    "f5_ga",
+    "f10_gf",
+    "f10_ga",
+    "f5_xg",
+    "f10_xg",
+    "f5_sot",
+    "f10_sot",
+    "venue_gf",
+    "rest_diff",
+    "euro_h",
+    "euro_a",
+    "h2h",
+    "imp_h",
+    "imp_d",
+    "imp_a",
+    "odds_missing",
+    "cup"
+  ],
+  "importance": {
+    "elo_diff": 0.2727,
+    "elo_h": 0.0265,
+    "elo_a": 0.0266,
+    "elo_exp": 0.2888,
+    "dc_lh": 0.0171,
+    "dc_la": 0.0215,
+    "dc_ph": 0.0156,
+    "dc_pd": 0.0188,
+    "dc_pa": 0.0159,
+    "f5_gf": 0.0147,
+    "f5_ga": 0.0147,
+    "f10_gf": 0.0205,
+    "f10_ga": 0.024,
+    "f5_xg": 0.0052,
+    "f10_xg": 0.0043,
+    "f5_sot": 0.0085,
+    "f10_sot": 0.0096,
+    "venue_gf": 0.0211,
+    "rest_diff": 0.0098,
+    "euro_h": 0.0005,
+    "euro_a": 0.0004,
+    "h2h": 0.0095,
+    "imp_h": 0.0612,
+    "imp_d": 0.0238,
+    "imp_a": 0.0536,
+    "odds_missing": 0.0,
+    "cup": 0.0151
+  },
+  "notes": [
+    "ClubElo API (clubelo.com) vrací 502 / timeout a stránka s datem je jen aktuální žebříček, ne historie. Vlastní Elo je jediný rating, ať neunikne budoucnost.",
+    "Soubory football-data.co.uk/new mají jen closing kurzy (PSCH, B365CH). Ty se do modelu neberou; zápasy z nich mají odds_missing.",
+    "Kódy KOR, KSA, CHI a COL na football-data.co.uk přesměrovávají na jinou zemi. Stahování je zahodí. Korea proto začíná jen s priorou ligy a výsledky ze živých zdrojů.",
+    "Česká historie v openfootball je jen několik sezón (ne od 1993). Nižší jistota, dokud se nenasbírají výsledky ze živých zdrojů.",
+    "Saudská Arábie v openfootball je hlavně 2024/25. J1, Čína, Brazílie a Argentina jedou z football-data extra CSV.",
+    "xG jen z Understatu (Premier League, La Liga, Bundesliga, Serie A, Ligue 1). Jinde je příznak prázdný.",
+    "1X2 je po 90 minutách. Prodloužení a penalty se nepočítají jako gól navíc.",
+    "Publikované metriky jsou kandidát natrénovaný jen do 2025-07-01. Když brána projde, ostrý model se dofituje na všech datech."
+  ],
+  "trained_at": "2026-10-20T19:36:44Z",
+  "data_from": "1993-01-01",
+  "data_to": "2027-12-23",
+  "n_matches": 399973,
+  "n_club": 368776,
+  "train_rows": 349325,
+  "test_rows": 19451,
+  "gbm_rounds": 160,
+  "published_model": true
+}

@@ -1,0 +1,221 @@
+{
+  "id": "401879263",
+  "date": "2026-10-18T13:00Z",
+  "name": "Sunderland at AFC Bournemouth",
+  "competitions": [
+    {
+      "status": {
+        "clock": 5400.0,
+        "displayClock": "90'+7'",
+        "period": 2,
+        "type": {
+          "id": "28",
+          "name": "STATUS_FULL_TIME",
+          "state": "post",
+          "completed": true,
+          "description": "Full Time",
+          "detail": "FT",
+          "shortDetail": "FT"
+        }
+      },
+      "competitors": [
+        {
+          "homeAway": "home",
+          "score": "2",
+          "winner": true,
+          "team": {
+            "id": "349",
+            "displayName": "AFC Bournemouth"
+          }
+        },
+        {
+          "homeAway": "away",
+          "score": "0",
+          "winner": false,
+          "team": {
+            "id": "366",
+            "displayName": "Sunderland"
+          }
+        }
+      ],
+      "details": [
+        {
+          "type": {
+            "id": "93",
+            "text": "Red Card"
+          },
+          "clock": {
+            "value": 989.0,
+            "displayValue": "17'"
+          },
+          "team": {
+            "id": "366"
+          },
+          "scoreValue": 0,
+          "scoringPlay": false,
+          "redCard": true,
+          "yellowCard": false,
+          "penaltyKick": false,
+          "ownGoal": false,
+          "shootout": false,
+          "athletesInvolved": [
+            {
+              "id": "250543",
+              "displayName": "Kevin Danso",
+              "shortName": "K. Danso",
+              "fullName": "Kevin Danso",
+              "jersey": "4",
+              "team": {
+                "id": "366"
+              },
+              "links": [
+                {
+                  "rel": [
+                    "playercard",
+                    "desktop",
+                    "athlete"
+                  ],
+                  "href": "https://www.espn.com/soccer/player/_/id/250543/kevin-danso",
+                  "isHidden": false
+                }
+              ],
+              "position": "CD-R"
+            }
+          ]
+        },
+        {
+          "type": {
+            "id": "94",
+            "text": "Yellow Card"
+          },
+          "clock": {
+            "value": 1549.0,
+            "displayValue": "26'"
+          },
+          "team": {
+            "id": "349"
+          },
+          "scoreValue": 0,
+          "scoringPlay": false,
+          "redCard": false,
+          "yellowCard": true,
+          "penaltyKick": false,
+          "ownGoal": false,
+          "shootout": false,
+          "athletesInvolved": [
+            {
+              "id": "346588",
+              "displayName": "António Silva",
+              "shortName": "A. Silva",
+              "fullName": "António Silva",
+              "jersey": "14",
+              "team": {
+                "id": "349"
+              },
+              "links": [
+                {
+                  "rel": [
+                    "playercard",
+                    "desktop",
+                    "athlete"
+                  ],
+                  "href": "https://www.espn.com/soccer/player/_/id/346588/antonio-silva",
+                  "isHidden": false
+                }
+              ],
+              "position": "CD-L"
+            }
+          ]
+        },
+        {
+          "type": {
+            "id": "94",
+            "text": "Yellow Card"
+          },
+          "clock": {
+            "value": 2382.0,
+            "displayValue": "40'"
+          },
+          "team": {
+            "id": "366"
+          },
+          "scoreValue": 0,
+          "scoringPlay": false,
+          "redCard": false,
+          "yellowCard": true,
+          "penaltyKick": false,
+          "ownGoal": false,
+          "shootout": false,
+          "athletesInvolved": [
+            {
+              "id": "215401",
+              "displayName": "Omar Alderete",
+              "shortName": "O. Alderete",
+              "fullName": "Omar Alderete",
+              "jersey": "15",
+              "team": {
+                "id": "366"
+              },
+              "links": [
+                {
+                  "rel": [
+                    "playercard",
+                    "desktop",
+                    "athlete"
+                  ],
+                  "href": "https://www.espn.com/soccer/player/_/id/215401/omar-alderete",
+                  "isHidden": false
+                }
+              ],
+              "position": "CD-L"
+            }
+          ]
+        },
+        {
+          "type": {
+            "id": "94",
+            "text": "Yellow Card"
+          },
+          "clock": {
+            "value": 2700.0,
+            "displayValue": "45'+6'"
+          },
+          "team": {
+            "id": "349"
+          },
+          "scoreValue": 0,
+          "scoringPlay": false,
+          "redCard": false,
+          "yellowCard": true,
+          "penaltyKick": false,
+          "ownGoal": false,
+          "shootout": false,
+          "athletesInvolved": [
+            {
+              "id": "223452",
+              "displayName": "Lewis Cook",
+              "shortName": "L. Cook",
+              "fullName": "Lewis Cook",
+              "jersey": "4",
+              "team": {
+                "id": "349"
+              },
+              "links": [
+                {
+                  "rel": [
+                    "playercard",
+                    "desktop",
+                    "athlete"
+                  ],
+                  "href": "https://www.espn.com/soccer/player/_/id/223452/lewis-cook",
+                  "isHidden": false
+                }
+              ],
+              "position": "CM-L"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

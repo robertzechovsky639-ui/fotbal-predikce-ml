@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+data/raw/
+dist/
+data/online-cache/
+data/online/
+*.log
+node_modules/
+.playwright/
+screenshots/

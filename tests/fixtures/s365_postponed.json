@@ -1,0 +1,17 @@
+{
+  "id": 4876789,
+  "statusGroup": 4,
+  "statusText": "Postponed",
+  "gameTime": -1.0,
+  "startTime": "2026-10-20T02:00:00+02:00",
+  "isHomeAwayInverted": false,
+  "competitionDisplayName": "Premier League - Group Stage",
+  "homeCompetitor": {
+    "name": "Al Shomooa SC",
+    "score": -1.0
+  },
+  "awayCompetitor": {
+    "name": "Al Ahli Tripoli",
+    "score": -1.0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": 4732106,
+  "statusGroup": 2,
+  "statusText": "Scheduled",
+  "gameTime": -1.0,
+  "startTime": "2026-10-20T22:00:00+02:00",
+  "isHomeAwayInverted": false,
+  "competitionDisplayName": "Primera B - Finalizacion",
+  "homeCompetitor": {
+    "name": "Independiente Valle del Cauca",
+    "score": -1.0
+  },
+  "awayCompetitor": {
+    "name": "Boca Juniors Cali",
+    "score": -1.0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": 4875956,
+  "statusGroup": 3,
+  "statusText": "2nd Half",
+  "gameTime": 98.0,
+  "startTime": "2026-10-20T19:30:00+02:00",
+  "isHomeAwayInverted": false,
+  "competitionDisplayName": "AFC Challenge League",
+  "homeCompetitor": {
+    "name": "Regar-Tadaz",
+    "score": 0.0
+  },
+  "awayCompetitor": {
+    "name": "Qadisiya Kuwait",
+    "score": 1.0
+  }
+}

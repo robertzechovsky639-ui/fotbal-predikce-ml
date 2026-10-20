@@ -1,0 +1,74 @@
+"""Přesnost, log loss a RPS (ranked probability score) pro 1X2. Pořadí tříd: domácí, remíza, hosté."""
+import math
+
+def _clip(probs):
+    out = []
+    for row in probs:
+        vals = [min(1 - 1e-12, max(1e-12, float(p))) for p in row]
+        total = sum(vals)
+        out.append([v / total for v in vals])
+    return out
+
+def accuracy(y, probs):
+    if not y:
+        return None
+    hit = 0
+    for truth, row in zip(y, probs):
+        pred = max(range(3), key=lambda i: row[i])
+        hit += int(pred == int(truth))
+    return hit / len(y)
+
+def log_loss(y, probs):
+    if not y:
+        return None
+    rows = _clip(probs)
+    total = 0.0
+    for truth, row in zip(y, rows):
+        total -= math.log(row[int(truth)])
+    return total / len(y)
+
+def rps(y, probs):
+    """RPS = průměr z (1/2) * sum_{k=1..2} (CDF_pred - CDF_obs)^2. Nižší je lepší."""
+    if not y:
+        return None
+    rows = _clip(probs)
+    total = 0.0
+    for truth, row in zip(y, rows):
+        obs = [0.0, 0.0, 0.0]
+        obs[int(truth)] = 1.0
+        cdf_p = cdf_o = 0.0
+        acc = 0.0
+        for k in range(2):
+            cdf_p += row[k]
+            cdf_o += obs[k]
+            acc += (cdf_p - cdf_o) ** 2
+        total += acc / 2.0
+    return total / len(y)
+
+def pack(y, probs):
+    return {"n": len(y), "accuracy": accuracy(y, probs), "log_loss": log_loss(y, probs), "rps": rps(y, probs)}
+
+def gate(model, baseline, elo, previous=None):
+    """Model musí porazit frekvenční baseline na log loss i RPS a nesmí být horší než Elo."""
+    reasons = []
+    ok = True
+    if model["log_loss"] > baseline["log_loss"] - 0.01:
+        ok = False
+        reasons.append("log loss není aspoň o 0,01 lepší než frekvenční baseline")
+    if model["rps"] > baseline["rps"] - 0.003:
+        ok = False
+        reasons.append("RPS není aspoň o 0,003 lepší než baseline")
+    if model["log_loss"] > elo["log_loss"] + 0.001:
+        ok = False
+        reasons.append("log loss je horší než Elo")
+    if model["rps"] > elo["rps"] + 0.001:
+        ok = False
+        reasons.append("RPS je horší než Elo")
+    if previous:
+        if model["log_loss"] > previous["log_loss"] + 0.01:
+            ok = False
+            reasons.append("log loss je o víc než 0,01 horší než minule publikovaný model")
+        if model["rps"] > previous["rps"] + 0.005:
+            ok = False
+            reasons.append("RPS je o víc než 0,005 horší než minule")
+    return ok, ("; ".join(reasons) if reasons else "brána prošla")

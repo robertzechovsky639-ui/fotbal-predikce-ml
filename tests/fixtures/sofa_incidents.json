@@ -1,0 +1,10 @@
+{
+  "incidents": [
+    {
+      "incidentType": "card",
+      "incidentClass": "yellow",
+      "isHome": false,
+      "time": 20
+    }
+  ]
+}

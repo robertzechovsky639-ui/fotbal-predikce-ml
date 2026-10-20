@@ -1,0 +1,38 @@
+{
+  "featured": {
+    "asian": {
+      "marketId": 17,
+      "marketName": "Asian handicap",
+      "suspended": false,
+      "choices": [
+        {
+          "name": "(-2.5) AS Roma",
+          "fractionalValue": "19/20"
+        },
+        {
+          "name": "(+2.5) ŠK Slovan Bratislava",
+          "fractionalValue": "9/10"
+        }
+      ]
+    },
+    "fullTime": {
+      "marketId": 1,
+      "marketName": "Full time",
+      "suspended": false,
+      "choices": [
+        {
+          "name": "1",
+          "fractionalValue": "1/33"
+        },
+        {
+          "name": "X",
+          "fractionalValue": "16/1"
+        },
+        {
+          "name": "2",
+          "fractionalValue": "50/1"
+        }
+      ]
+    }
+  }
+}

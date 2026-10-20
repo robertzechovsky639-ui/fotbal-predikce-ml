@@ -1,0 +1,17 @@
+{
+  "id": 4633247,
+  "statusGroup": 4,
+  "statusText": "Ended",
+  "gameTime": 90.0,
+  "startTime": "2026-10-20T00:00:00+02:00",
+  "isHomeAwayInverted": false,
+  "competitionDisplayName": "Liga Profesional - Clausura",
+  "homeCompetitor": {
+    "name": "Sarmiento Junin",
+    "score": 1.0
+  },
+  "awayCompetitor": {
+    "name": "Barracas Central",
+    "score": 1.0
+  }
+}
