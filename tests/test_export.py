@@ -7,6 +7,33 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import export_static as ex
 
 
+def test_public_goal_lines():
+    item = {
+        "id": "espn:1", "src": "espn", "league": "cze.1", "league_name": "Chance Liga",
+        "region": "czech", "country": "cze", "ts": 1, "status": "upcoming",
+        "minute": None, "period": None, "hg": None, "ag": None, "reds": [0, 0],
+        "neutral": False, "cup": False, "home_name": "Sparta", "away_name": "Slavia", "odds": None,
+    }
+    pred = {
+        "home_id": "club:cze:sparta", "away_id": "club:cze:slavia",
+        "pred": [0.46, 0.27, 0.27], "lam": [1.42, 1.08], "rho": -0.03,
+        "ou": {"over": 0.49, "under": 0.51, "lines": {
+            "1.5": {"over": 0.71, "under": 0.29},
+            "2.5": {"over": 0.49, "under": 0.51},
+            "3.5": {"over": 0.24, "under": 0.76},
+        }},
+        "btts": 0.53, "exact": [("1-1", 0.12), ("1-0", 0.11)],
+        "pred_low": False, "pred_note": None, "elo": [1600, 1590], "n": [40, 40],
+    }
+    pub = ex.public_match(item, pred)
+    assert pub["xg"] == [1.42, 1.08]
+    assert pub["ou"]["line"] == 2.5
+    assert pub["ou"]["over"] == 0.49
+    assert pub["ou"]["lines"]["1.5"]["over"] == 0.71
+    assert pub["ou"]["lines"]["3.5"]["under"] == 0.76
+    assert pub["exact"][0] == ["1-1", 0.12]
+
+
 def test_sofa_payload_is_not_dropped():
     assert ex.sofa_events({"events": [{"id": 7}]}) == [{"id": 7}]
     assert ex.sofa_events({"events": None}) == []

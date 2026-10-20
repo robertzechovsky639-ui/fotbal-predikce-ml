@@ -70,20 +70,26 @@
     return m;
   }
   function marketsFrom(matrix, baseH, baseA) {
-    let home = 0, draw = 0, away = 0, over = 0, btts = 0;
+    let home = 0, draw = 0, away = 0, btts = 0;
+    const overs = { '1.5': 0, '2.5': 0, '3.5': 0 };
     const exact = [];
     const n = matrix.length;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       const p = matrix[i][j];
       const H = (baseH || 0) + i, A = (baseA || 0) + j;
+      const goals = H + A;
       if (H > A) home += p; else if (H === A) draw += p; else away += p;
-      if (H + A >= 3) over += p;
+      if (goals >= 2) overs['1.5'] += p;
+      if (goals >= 3) overs['2.5'] += p;
+      if (goals >= 4) overs['3.5'] += p;
       if (H >= 1 && A >= 1) btts += p;
       exact.push([H + '-' + A, p]);
     }
     const t = home + draw + away || 1;
     exact.sort((a, b) => b[1] - a[1]);
-    return { p: [home / t, draw / t, away / t], over, under: 1 - over, btts, exact: exact.slice(0, 5) };
+    const ou = {};
+    ['1.5', '2.5', '3.5'].forEach(line => { ou[line] = { over: overs[line], under: 1 - overs[line] }; });
+    return { p: [home / t, draw / t, away / t], over: overs['2.5'], under: 1 - overs['2.5'], ou, btts, exact: exact.slice(0, 5) };
   }
   function markets(lh, la, rho) { return marketsFrom(scoreMatrix(lh, la, rho || 0, 8), 0, 0); }
   function liveMarkets(hg, ag, lh, la) { return marketsFrom(scoreMatrix(Math.max(lh, 1e-4), Math.max(la, 1e-4), 0, 6), hg, ag); }
@@ -433,7 +439,10 @@
     const lam = eloLambdas(eloH, eloA, !!m.neutral, params);
     const mk = markets(lam[0], lam[1], 0);
     m.pred = { h: +mk.p[0].toFixed(4), d: +mk.p[1].toFixed(4), a: +mk.p[2].toFixed(4) };
-    m.lam = lam; m.rho = 0; m.ou = { over: mk.over, under: mk.under, line: 2.5 }; m.btts = mk.btts;
+    m.lam = lam; m.rho = 0;
+    m.xg = [lam[0], lam[1]];
+    m.ou = { over: mk.over, under: mk.under, line: 2.5, lines: mk.ou };
+    m.btts = mk.btts;
     m.exact = mk.exact.map(x => [x[0], +x[1].toFixed(4)]);
     m.pred_low = true;
     m.pred_note = (!h || !a || (h.n || 0) < 8 || (a.n || 0) < 8)
@@ -444,19 +453,55 @@
     return m;
   }
 
+  function goalView(m) {
+    if (!m) return null;
+    const live = m.status === 'live' && m.live;
+    const lines = (live && m.live.ouLines) || (m.ou && m.ou.lines) || null;
+    let over25 = null;
+    if (lines && lines['2.5']) over25 = lines['2.5'].over;
+    else if (live && m.live.ou != null) over25 = m.live.ou;
+    else if (m.ou) over25 = m.ou.over;
+    const btts = live ? m.live.btts : m.btts;
+    const xg = live && m.live.xg ? m.live.xg : (m.xg || m.lam || null);
+    const exact = (live && m.live.exact) || m.exact || null;
+    return { xg, over25, btts, lines, exact };
+  }
+  function goalText(m) {
+    const view = goalView(m);
+    if (!view || !view.xg) return null;
+    const n = v => (Math.round(+v * 100) / 100).toFixed(2);
+    const pc = v => v == null ? '–' : Math.round(+v * 100) + ' %';
+    const top = view.exact && view.exact[0] ? view.exact[0][0] + ' ' + pc(view.exact[0][1]) : '–';
+    return {
+      xg: (m.status === 'live' ? 'xG teď ' : 'xG ') + n(view.xg[0]) + '–' + n(view.xg[1]),
+      ou: 'O2,5 ' + pc(view.over25),
+      btts: 'oba ' + pc(view.btts),
+      exact: top,
+    };
+  }
+
   function liveCalc(m) {
     if (m.status !== 'live' || !m.pred || !m.lam) { if (m.status !== 'live') m.live = m.live && m.status === 'finished' ? m.live : null; return false; }
     const key = liveKey(m);
     if (m.live && m._lk === key) return false;
     const rem = remaining(m.lam[0], m.lam[1], m.minute || 0, m.reds || [0, 0], [m.hg || 0, m.ag || 0], m.period || 1);
     const mk = liveMarkets(m.hg || 0, m.ag || 0, rem[0], rem[1]);
-    m.live = { p: { h: mk.p[0], d: mk.p[1], a: mk.p[2] }, ou: mk.over, btts: mk.btts, exact: mk.exact, rem };
+    m.live = {
+      p: { h: mk.p[0], d: mk.p[1], a: mk.p[2] },
+      ou: mk.over,
+      ouLines: mk.ou,
+      btts: mk.btts,
+      exact: mk.exact,
+      xg: [(m.hg || 0) + rem[0], (m.ag || 0) + rem[1]],
+      rem,
+    };
     m._lk = key;
     return true;
   }
 
   return {
     setRules, canon, codeOf, clubId, scoreMatrix, markets, liveMarkets, remaining, eloLambdas,
+    goalView, goalText,
     applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf, listVisible, mergeList, sofaGoals, sofaRegulation,
     parseEspnEvent, parseSofaEvent, parseSofaIncidents, parseSofaOdds, parse365, orient, alignUpdate, espnMinute, sofaMinute,
   };

@@ -13,6 +13,7 @@ import dataset
 import dixon
 import elo
 import features
+import goals
 import metrics
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -197,6 +198,7 @@ def main():
             "date": match["date"], "region": match["region"], "league_id": match["league_id"],
             "home_id": match["home_id"], "away_id": match["away_id"], "neutral": bool(match.get("neutral")),
             "cup": bool(match.get("cup")), "imp": match.get("imp"), "y": _y(match),
+            "hg": match["hg"], "ag": match["ag"],
             "sh": sh, "sa": sa, "h2h": h2h, "elo_exp": exp,
         })
     print("klubových řádků", len(rows))
@@ -328,6 +330,9 @@ def main():
     ok, reason = metrics.gate(report["blend"], report["baseline"], report["elo"], prev_test)
     print("brána", ok, reason)
 
+    print("gólový model (Dixon-Coles/Poisson + LightGBM)")
+    goals_report = goals.run(rows, dc_2023, dc_hold, elo_params, MODEL, (previous or {}).get("goals"))
+
     gain = candidate.feature_importance(importance_type="gain")
     total = float(gain.sum()) or 1.0
     importance = {features.FEATURES[i]: round(float(gain[i]) / total, 4) for i in range(len(features.FEATURES))}
@@ -353,6 +358,7 @@ def main():
         "test_rows": len(test_idx),
         "gbm_rounds": 160,
         "published_model": bool(ok),
+        "goals": goals_report,
     }
     blob["history"].append({
         "at": blob["trained_at"],

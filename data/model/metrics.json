@@ -625,5 +625,262 @@
   "train_rows": 349325,
   "test_rows": 19451,
   "gbm_rounds": 160,
-  "published_model": true
+  "published_model": true,
+  "goals": {
+    "split": "trénink < 2025-07-01, test ≥ 2025-07-01; váha z posledních 120 dní tréninku",
+    "blend_w": 1.0,
+    "published": true,
+    "gate": {
+      "ok": true,
+      "reason": "brána gólů prošla"
+    },
+    "test": {
+      "before": {
+        "ou15": {
+          "n": 19451,
+          "log_loss": 0.5703394792166495,
+          "brier": 0.19142004415140793
+        },
+        "ou25": {
+          "n": 19451,
+          "log_loss": 0.6930192005162188,
+          "brier": 0.24902918808777338
+        },
+        "ou35": {
+          "n": 19451,
+          "log_loss": 0.5937711966189829,
+          "brier": 0.201039277344905
+        },
+        "btts": {
+          "n": 19451,
+          "log_loss": 0.6983141824680144,
+          "brier": 0.2521505701441175
+        },
+        "mean": {
+          "n": 19451,
+          "log_loss": 0.6388610147049664,
+          "brier": 0.22340976993205097
+        }
+      },
+      "after": {
+        "ou15": {
+          "n": 19451,
+          "log_loss": 0.560378218450443,
+          "brier": 0.18739817382172827
+        },
+        "ou25": {
+          "n": 19451,
+          "log_loss": 0.6792613479352672,
+          "brier": 0.24314584754955076
+        },
+        "ou35": {
+          "n": 19451,
+          "log_loss": 0.5810314140444007,
+          "brier": 0.19690761603731985
+        },
+        "btts": {
+          "n": 19451,
+          "log_loss": 0.6873769517298943,
+          "brier": 0.24712568233871526
+        },
+        "mean": {
+          "n": 19451,
+          "log_loss": 0.6270119830400013,
+          "brier": 0.21864432993682853
+        }
+      },
+      "baseline": {
+        "ou15": {
+          "n": 19451,
+          "log_loss": 0.5710319636160891,
+          "brier": 0.1914535156417801
+        },
+        "ou25": {
+          "n": 19451,
+          "log_loss": 0.6936905273798359,
+          "brier": 0.2502715923767859
+        },
+        "ou35": {
+          "n": 19451,
+          "log_loss": 0.5938794837092447,
+          "brier": 0.2020205945761427
+        },
+        "btts": {
+          "n": 19451,
+          "log_loss": 0.692133976651445,
+          "brier": 0.24949347125564825
+        },
+        "mean": {
+          "n": 19451,
+          "log_loss": 0.6376839878391537,
+          "brier": 0.22330979346258922
+        }
+      }
+    },
+    "by_region": {
+      "after": {
+        "europe_top": {
+          "n": 2862,
+          "log_loss": 0.6222571899485903,
+          "brier": 0.2166821440706042
+        },
+        "europe_lower": {
+          "n": 12167,
+          "log_loss": 0.6258577555424281,
+          "brier": 0.21809275292473207
+        },
+        "czech": {
+          "n": 71,
+          "log_loss": 0.6137850908965721,
+          "brier": 0.2125792000657889
+        },
+        "europe_cups": {
+          "n": 619,
+          "log_loss": 0.6403824545335777,
+          "brier": 0.22491109892505143
+        },
+        "asia": {
+          "n": 598,
+          "log_loss": 0.6417370014095125,
+          "brier": 0.22530530434444032
+        },
+        "south_america": {
+          "n": 1993,
+          "log_loss": 0.6276524509571477,
+          "brier": 0.21882370850516553
+        },
+        "other": {
+          "n": 1141,
+          "log_loss": 0.6359799740429616,
+          "brier": 0.22262114281149897
+        }
+      },
+      "before": {
+        "europe_top": {
+          "n": 2862,
+          "log_loss": 0.6332080141215434,
+          "brier": 0.2212289665533076
+        },
+        "europe_lower": {
+          "n": 12167,
+          "log_loss": 0.6396887619050275,
+          "brier": 0.2235711979590096
+        },
+        "czech": {
+          "n": 71,
+          "log_loss": 0.6269922795375464,
+          "brier": 0.2165963684791427
+        },
+        "europe_cups": {
+          "n": 619,
+          "log_loss": 0.6439317156918324,
+          "brier": 0.22649333003565308
+        },
+        "asia": {
+          "n": 598,
+          "log_loss": 0.6399501474306661,
+          "brier": 0.2243463727341568
+        },
+        "south_america": {
+          "n": 1993,
+          "log_loss": 0.6386828030495115,
+          "brier": 0.2235674887692725
+        },
+        "other": {
+          "n": 1141,
+          "log_loss": 0.6419420648644739,
+          "brier": 0.22514331081438468
+        }
+      },
+      "baseline": {
+        "europe_top": {
+          "n": 2862,
+          "log_loss": 0.6399664512206937,
+          "brier": 0.22439964495255896
+        },
+        "europe_lower": {
+          "n": 12167,
+          "log_loss": 0.6362279824722759,
+          "brier": 0.22262514334656208
+        },
+        "czech": {
+          "n": 71,
+          "log_loss": 0.6164614483603867,
+          "brier": 0.2135444797951968
+        },
+        "europe_cups": {
+          "n": 619,
+          "log_loss": 0.6539731343138012,
+          "brier": 0.23092176949728432
+        },
+        "asia": {
+          "n": 598,
+          "log_loss": 0.6519920660742197,
+          "brier": 0.2299513474985775
+        },
+        "south_america": {
+          "n": 1993,
+          "log_loss": 0.631080952161605,
+          "brier": 0.22021774510236142
+        },
+        "other": {
+          "n": 1141,
+          "log_loss": 0.6440032210164632,
+          "brier": 0.22627500833619535
+        }
+      }
+    },
+    "mae": {
+      "before": {
+        "home": 0.969341229580375,
+        "away": 0.8557343303002944,
+        "total": 1.3244603408665063
+      },
+      "after": {
+        "home": 0.9494046149576953,
+        "away": 0.8411304992701332,
+        "total": 1.305297725061435
+      }
+    },
+    "train_rate": {
+      "ou15": 0.7321176554784227,
+      "ou25": 0.4869505474844343,
+      "ou35": 0.272705932870536,
+      "btts": 0.5111085665211479
+    },
+    "features": [
+      "elo_diff",
+      "elo_h",
+      "elo_a",
+      "elo_exp",
+      "dc_lh",
+      "dc_la",
+      "dc_ph",
+      "dc_pd",
+      "dc_pa",
+      "f5_gf",
+      "f5_ga",
+      "f10_gf",
+      "f10_ga",
+      "f5_xg",
+      "f10_xg",
+      "f5_sot",
+      "f10_sot",
+      "venue_gf",
+      "rest_diff",
+      "euro_h",
+      "euro_a",
+      "h2h",
+      "imp_h",
+      "imp_d",
+      "imp_a",
+      "odds_missing",
+      "cup",
+      "base_lh",
+      "base_la"
+    ],
+    "objective": "poisson",
+    "rounds": 140,
+    "note": "Góly: základ je Dixon-Coles, kde oba týmy v ligovém modelu jsou, jinak Elo Poisson. LightGBM (poisson) upřesní lambdy; váha je z posledních 120 dní tréninku. 1X2 se nemění. Součet očekávaných gólů zůstává ze směsi, kalibrace jen rozdělí domácí a hosty. Desetiminutový export přehraje dohrané zápasy ze state.json do Elo před výpočtem. Stromy se mění až denním učením."
+  }
 }

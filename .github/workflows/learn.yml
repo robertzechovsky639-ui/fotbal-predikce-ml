@@ -33,7 +33,13 @@ jobs:
       - name: Publikace modelu (jen learn, export ho nepřepisuje)
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          cd data/model && tar czf ../../model.tar.gz gbm.txt dc.json elo_state.json metrics.json && cd ../..
+          cd data/model
+          extra=""
+          if [ -f goals_h.txt ] && [ -f goals_a.txt ] && [ -f goals_meta.json ]; then
+            extra="goals_h.txt goals_a.txt goals_meta.json"
+          fi
+          tar czf ../../model.tar.gz gbm.txt dc.json elo_state.json metrics.json $extra
+          cd ../..
           gh release view model -R "${{ github.repository }}" >/dev/null 2>&1 || gh release create model -R "${{ github.repository }}" --title model --notes "fotbal model"
           gh release upload model model.tar.gz --clobber -R "${{ github.repository }}"
           gh workflow run pages.yml -R "${{ github.repository }}"

@@ -13,6 +13,8 @@ MODEL = ROOT / "data" / "model"
 INCOMING = ROOT / "data" / "online-cache" / "incoming"
 PUBLISHED = ROOT / "data" / "online" / "state.published.json"
 REPO = os.environ.get("GITHUB_REPOSITORY", "robertzechovsky639-ui/fotbal-predikce-ml")
+# Gólové stromy (goals_h.txt, goals_a.txt, goals_meta.json) jsou volitelné.
+# Starší release bez nich pořád platí; když v archivu jsou, extractall je doplní.
 NEED = {"gbm.txt", "dc.json", "elo_state.json", "metrics.json"}
 
 

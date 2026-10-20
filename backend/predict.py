@@ -9,6 +9,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import dixon
 import elo
 import features
+import goals as goals_mod
 import names
 import train
 
@@ -49,7 +50,7 @@ def linked_league(dc_models, hinted, home_id, away_id):
     return best or hinted
 
 
-def predict_fixture(state, dc_models, booster, blend_w, elo_params, league_counts, fixture):
+def predict_fixture(state, dc_models, booster, blend_w, elo_params, league_counts, fixture, goals=None):
     """fixture: home_name, away_name, country, league_id, region, league_name, date, neutral, cup."""
     country = fixture.get("country")
     home_id = names.resolve_club(state.get("teams") or {}, fixture["home_name"], country)
@@ -89,6 +90,8 @@ def predict_fixture(state, dc_models, booster, blend_w, elo_params, league_count
         else:
             lh, la = elo_lh, elo_la
             rho = 0.0
+        if goals:
+            lh, la = goals_mod.apply_match(goals, row, lh, la)
     else:
         probs = elo_p
         lh, la = elo_lh, elo_la
@@ -98,14 +101,18 @@ def predict_fixture(state, dc_models, booster, blend_w, elo_params, league_count
             note = LOW_TEAM
         else:
             note = LOW_LEAGUE
+    # Kalibrace srovná poměr lambd s publikovaným 1X2. Součet gólů zůstává z gólového modelu (nebo z Poissonu).
+    goal_total = float(lh) + float(la)
     lh, la = dixon.calibrate(lh, la, rho, probs)
+    lh, la = goals_mod.rescale_total(lh, la, goal_total)
     mk = dixon.markets(lh, la, rho)
     # kalibrace má 1X2 srovnat s publikovanou pravděpodobností; trhy bereme z matice,
     # ale 1X2 publikujeme přesně to, co vyšlo z modelu (matice je jen pro góly).
     return {
         "home_id": home_id, "away_id": away_id,
         "pred": probs, "lam": [lh, la], "rho": rho,
-        "ou": {"over": mk["over"], "under": mk["under"], "line": 2.5},
+        "xg": [lh, la],
+        "ou": {"over": mk["over"], "under": mk["under"], "line": 2.5, "lines": mk["lines"]},
         "btts": mk["btts"], "exact": mk["exact"],
         "pred_low": low, "pred_note": note,
         "elo": [round(sh["elo"]), round(sa["elo"])],
@@ -141,4 +148,5 @@ def load_model(folder):
         "metrics": metrics_blob,
         "trained_through": elo_blob.get("trained_through"),
         "recent_keys": set(elo_blob.get("recent_keys") or []),
+        "goals": goals_mod.load_boosters(folder),
     }

@@ -541,6 +541,22 @@ def h2h_list(state, home_id, away_id, home_name, away_name):
     return rows[-8:]
 
 
+def _public_line(block):
+    return {"over": round(float(block["over"]), 4), "under": round(float(block["under"]), 4)}
+
+
+def _public_ou(ou):
+    lines = (ou or {}).get("lines") or {}
+    packed = {}
+    for name in ("1.5", "2.5", "3.5"):
+        block = lines.get(name)
+        if block:
+            packed[name] = _public_line(block)
+    if "2.5" not in packed:
+        packed["2.5"] = {"over": round(float(ou["over"]), 4), "under": round(float(ou["under"]), 4)}
+    return {"over": packed["2.5"]["over"], "under": packed["2.5"]["under"], "line": 2.5, "lines": packed}
+
+
 def public_match(item, pred):
     return {
         "id": item["id"], "src": item["src"], "league": item["league"], "league_name": item["league_name"],
@@ -554,8 +570,9 @@ def public_match(item, pred):
         ],
         "pred": {"h": round(pred["pred"][0], 4), "d": round(pred["pred"][1], 4), "a": round(pred["pred"][2], 4)},
         "lam": [round(pred["lam"][0], 4), round(pred["lam"][1], 4)],
+        "xg": [round(pred["lam"][0], 4), round(pred["lam"][1], 4)],
         "rho": round(pred["rho"], 4),
-        "ou": {"over": round(pred["ou"]["over"], 4), "under": round(pred["ou"]["under"], 4), "line": 2.5},
+        "ou": _public_ou(pred["ou"]),
         "btts": round(pred["btts"], 4),
         "exact": [[s, round(p, 4)] for s, p in pred["exact"]],
         "pred_low": bool(pred["pred_low"]), "pred_note": pred["pred_note"],
@@ -632,7 +649,10 @@ def main():
             "date": prague_day(item["ts"]), "neutral": item.get("neutral"), "cup": item.get("cup"),
         }
         try:
-            pred = predict.predict_fixture(runtime, pack["dc"], pack["booster"], pack["blend_w"], pack["elo_params"], pack["league_counts"], fixture)
+            pred = predict.predict_fixture(
+                runtime, pack["dc"], pack["booster"], pack["blend_w"], pack["elo_params"], pack["league_counts"], fixture,
+                goals=pack.get("goals"),
+            )
         except Exception as exc:
             print("predikce selhala", item["home_name"], exc)
             continue
@@ -696,6 +716,7 @@ def main():
         "n_matches": metrics.get("n_matches"), "train_rows": metrics.get("train_rows"),
         "test_rows": metrics.get("test_rows"), "blend_w": metrics.get("blend_w"),
         "elo_params": pack["elo_params"], "features": metrics.get("features"),
+        "goals": metrics.get("goals"),
     }, ensure_ascii=False), encoding="utf-8")
     teams = []
     for tid, team in runtime["teams"].items():
