@@ -106,7 +106,7 @@ def dataset_stable(slug, league_name, country, region, cup):
 def blank():
     return {
         "id": None, "src": None, "league": None, "league_name": None, "region": None, "country": None,
-        "ts": None, "status": "upcoming", "minute": None, "period": 1, "hg": None, "ag": None,
+        "ts": None, "status": "upcoming", "minute": None, "period": 1, "ht": False, "hg": None, "ag": None,
         "reds": [0, 0], "winner": None, "neutral": False, "cup": False,
         "home_name": None, "away_name": None, "odds": None,
     }
@@ -139,7 +139,7 @@ def espn_events(slug, ymd):
             status = "cancelled"
         elif name == "STATUS_ABANDONED":
             status = "abandoned"
-        elif state == "in":
+        elif name == "STATUS_HALFTIME" or state == "in":
             status = "live"
         elif state == "post" or name == "STATUS_FULL_TIME":
             status = "finished"
@@ -147,8 +147,13 @@ def espn_events(slug, ymd):
             status = "upcoming"
         clock = (comp.get("status") or {}).get("displayClock")
         minute = minute_of(clock) if status == "live" else (minute_of(clock) if status == "finished" else None)
+        ht = name == "STATUS_HALFTIME"
+        if ht:
+            minute = None
         period = 1
-        if name.startswith("STATUS_EXTRA") or "PENALT" in name:
+        if name in {"STATUS_PENALTY_SHOOTOUT", "STATUS_SHOOTOUT"} or "PENALT" in name:
+            period = 5
+        elif name.startswith("STATUS_EXTRA") or "EXTRA" in name:
             period = 3
         elif minute and minute > 45:
             period = 2
@@ -176,7 +181,7 @@ def espn_events(slug, ymd):
         item.update({
             "id": f"espn:{ev['id']}", "src": "espn", "league": slug, "league_name": league_name,
             "ts": iso_ts(ev["date"]), "status": status,
-            "minute": minute, "period": period, "hg": goals(home), "ag": goals(away), "reds": reds,
+            "minute": minute, "period": period, "ht": ht, "hg": goals(home), "ag": goals(away), "reds": reds,
             "home_name": hn, "away_name": an,
             "league_id": hinted_league(slug, league_name, cls["country"], cls["region"], cls["cup"]),
         })
@@ -268,11 +273,21 @@ def fetch_365(dates):
             minute = int(float(minute)) if status == "live" and minute is not None else None
         except (TypeError, ValueError):
             minute = None
+        ht = status == "live" and low in {"halftime", "ht"}
+        if ht:
+            minute = None
+        if "penalt" in low:
+            period = 5
+        elif "extra" in low:
+            period = 3
+        elif (minute or 0) > 45:
+            period = 2
+        else:
+            period = 1
         item.update({
             "id": f"s365:{game.get('id')}", "src": "s365", "league": f"s365.{game.get('competitionId')}",
             "league_name": league_name,
-            "ts": iso_ts(game.get("startTime")), "status": status, "minute": minute,
-            "period": 3 if "penalt" in low or "extra" in low else (2 if (minute or 0) > 45 else 1),
+            "ts": iso_ts(game.get("startTime")), "status": status, "minute": minute, "period": period, "ht": ht,
             "hg": goals(home), "ag": goals(away),
             "home_name": hn, "away_name": an,
             "country_raw": countries.get(comp.get("countryId")),
@@ -338,7 +353,7 @@ def sofa_clock(ev, status, now=None):
     now = dt.datetime.now(dt.timezone.utc).timestamp() if now is None else now
     elapsed = max(0, now - float(clock["currentPeriodStartTimestamp"]))
     sec = float(clock.get("initial") or 0) + elapsed
-    cap = float(clock["max"] if clock.get("max") is not None else (2700 if period == 1 else 5400)) + float(clock.get("extra") or 0)
+    cap = float(clock["max"] if clock.get("max") is not None else (2700 if period == 1 else 7200 if period >= 3 else 5400)) + float(clock.get("extra") or 0)
     if sec > cap:
         sec = cap
     return int(sec // 60), period
@@ -380,12 +395,15 @@ def fetch_sofa():
         })
         start = ev.get("startTimestamp")
         minute, period = sofa_clock(ev, status)
+        ht = status == "live" and ("halftime" in desc or desc == "ht")
+        if ht:
+            minute = None
         item = blank()
         item.update({
             "id": f"sofa:{ev.get('id')}", "src": "sofa", "league": f"sofa.{(ev.get('tournament') or {}).get('id')}",
             "league_name": tourn,
             "ts": int(start) if start else None, "status": status, "minute": minute if status == "live" else None,
-            "period": period, "hg": sofa_goals(ev.get("homeScore") or {}, status),
+            "period": period, "ht": ht, "hg": sofa_goals(ev.get("homeScore") or {}, status),
             "ag": sofa_goals(ev.get("awayScore") or {}, status),
             "hg90": sofa_regulation(ev.get("homeScore") or {}, status),
             "ag90": sofa_regulation(ev.get("awayScore") or {}, status),
@@ -549,7 +567,7 @@ def public_match(item, pred):
         "tier": item.get("tier"), "segment": item.get("segment") or "main", "tags": item.get("tags") or [],
         "ut": item.get("ut"), "ut_slug": item.get("ut_slug"),
         "ts": item["ts"], "status": item["status"],
-        "minute": item["minute"], "period": item["period"], "hg": item["hg"], "ag": item["ag"],
+        "minute": item["minute"], "period": item["period"], "ht": bool(item.get("ht")), "hg": item["hg"], "ag": item["ag"],
         "reds": item["reds"], "winner": winner_of(item), "neutral": bool(item.get("neutral")),
         "cup": bool(item.get("cup")),
         "teams": [

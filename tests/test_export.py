@@ -53,6 +53,11 @@ def test_sofa_payload_is_not_dropped():
         "time": {"initial": 2700, "currentPeriodStartTimestamp": now - 120, "max": 5400, "extra": 540},
     }, "live", now=now)
     assert (minute, period) == (47, 2)
+    et_min, et_period = ex.sofa_clock({
+        "status": {"description": "Extra time"},
+        "time": {"initial": 5400, "currentPeriodStartTimestamp": now - 180},
+    }, "live", now=now)
+    assert (et_min, et_period) == (93, 3)
     assert ex.sofa_goals({"current": 1, "normaltime": 0}, "live") == 1
     assert ex.sofa_goals({"current": 2, "normaltime": 1}, "finished") == 2
     assert ex.sofa_regulation({"current": 2, "normaltime": 1}, "finished") == 1

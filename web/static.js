@@ -26,7 +26,9 @@ function pairKey(m) {
 }
 function indexM(m) {
   if (!m.ssid && typeof m.id === 'string' && m.id.indexOf('sofa:') === 0) m.ssid = m.id.slice(5);
-  ST.byId[m.id] = m; ST.byPair[pairKey(m)] = m; m.day = m.status === 'live' ? 0 : dayOf(m.ts);
+  ST.byId[m.id] = m;
+  for (const id of m._ids || []) if (id) ST.byId[id] = m;
+  ST.byPair[pairKey(m)] = m; m.day = m.status === 'live' ? 0 : dayOf(m.ts);
 }
 
 function classSig(m) {
@@ -43,7 +45,7 @@ function applyClass(m) {
 function applyData(d) {
   const merged = Fotbal.mergeList({ generated: ST.generated, matches: ST.all }, d);
   if (!merged.changed) return false;
-  ST.generated = merged.generated; ST.all = merged.matches; ST.byId = {}; ST.byPair = {};
+  ST.generated = merged.generated; ST.all = Fotbal.dedupeMatches(merged.matches); ST.byId = {}; ST.byPair = {};
   for (const m of ST.all) { applyClass(m); if (!m.pred) Fotbal.ensurePred(m, predCtx()); indexM(m); if (m.status === 'live') Fotbal.liveCalc(m); }
   return true;
 }
@@ -84,7 +86,7 @@ async function staticApi(u) {
     const d = await r.json();
     const live = ST.byId[id];
     if (live) {
-      d.status = live.status; d.hg = live.hg; d.ag = live.ag; d.minute = live.minute; d.period = live.period;
+      d.status = live.status; d.hg = live.hg; d.ag = live.ag; d.minute = live.minute; d.period = live.period; d.ht = live.ht;
       d.pred = live.pred; d.live = live.live; d.reds = live.reds;
       d.lam = live.lam; d.xg = live.xg; d.ou = live.ou; d.btts = live.btts; d.exact = live.exact;
       d.teams_goals = live.teams_goals; d.total_goals = live.total_goals;

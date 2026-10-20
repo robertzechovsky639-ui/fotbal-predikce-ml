@@ -10,19 +10,47 @@ NAT_ALIASES = RULES["nat_aliases"]
 COUNTRIES = RULES["countries"]
 
 def strip_accents(value):
-    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = str(value or "").translate(str.maketrans({
+        "ø": "o", "Ø": "o", "æ": "ae", "Æ": "ae", "œ": "oe", "Œ": "oe",
+        "ł": "l", "Ł": "l", "đ": "d", "Đ": "d", "ð": "d", "Ð": "d",
+        "þ": "th", "Þ": "th", "ß": "ss", "ı": "i",
+    }))
+    text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return text.lower().replace("'", "").replace("’", "")
+
+def _collapse_initials(tokens):
+    """N.E.C. a F.C. jsou zkratky, ne tři samostatná písmena."""
+    out, buf = [], []
+
+    def flush():
+        if len(buf) >= 2:
+            out.append("".join(buf))
+        elif len(buf) == 1:
+            out.append(buf[0])
+        buf.clear()
+
+    for token in tokens:
+        if len(token) == 1 and token.isalpha():
+            buf.append(token)
+        else:
+            flush()
+            out.append(token)
+    flush()
+    return out
 
 def _tokens(value, drop_stop):
     text = strip_accents(value)
     text = re.sub(r"[^a-z0-9]+", " ", text)
-    out = []
+    raw = []
     for token in text.split():
         if token.isdigit():
             continue
         if re.fullmatch(r"(18|19|20)\d\d", token):
             continue
+        raw.append(token)
+    out = []
+    for token in _collapse_initials(raw):
         if drop_stop and token in STOP:
             continue
         out.append(CITY.get(token, token))
@@ -81,6 +109,20 @@ def _matching_ids(teams, key, code):
     return hits
 
 
+def _prefix_ids(teams, key, code):
+    """Santos v Mexiku je Santos Laguna, ne brazilský Santos se stejným krátkým názvem."""
+    needle = key + " "
+    hits = []
+    for tid in teams:
+        country, canon_key = _club_parts(tid)
+        if code and country != code:
+            continue
+        if canon_key.startswith(needle) and (teams[tid].get("n") or 0) >= 8:
+            hits.append(tid)
+    hits.sort(key=lambda tid: ((teams[tid] or {}).get("n") or 0, tid), reverse=True)
+    return hits
+
+
 def resolve_club(teams, name, country=None):
     """Najde id. Stejný canon v jedné zemi se sejde na tým s nejvíc zápasy."""
     key = canon(name)
@@ -91,9 +133,19 @@ def resolve_club(teams, name, country=None):
     if hits:
         return hits[0]
     if code:
-        hits = _matching_ids(teams, key, None)
-        if hits:
-            return hits[0]
+        foreign = [tid for tid in _matching_ids(teams, key, None) if not str(tid).startswith(f"club:{code}:")]
+        prefixed = _prefix_ids(teams, key, code)
+        if prefixed and foreign:
+            return prefixed[0]
+        if foreign:
+            return foreign[0]
+        if prefixed:
+            return prefixed[0]
+        stem = " ".join(key.split()[:-1]) if " " in key else ""
+        if stem:
+            hits = [tid for tid in _matching_ids(teams, stem, code) if (teams[tid].get("n") or 0) >= 8]
+            if hits:
+                return hits[0]
     return f"club:{code or 'xx'}:{key}"
 
 

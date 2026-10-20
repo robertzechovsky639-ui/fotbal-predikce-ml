@@ -331,4 +331,122 @@ assert.ok(js.includes('comp_rules.json') && js.includes('setComp'));
 assert.ok(!js.includes("m.region = m.region || 'europe_lower'"));
 assert.ok(!js.includes('function women'));
 
+assert.strictEqual(F.canon('N.E.C. Nijmegen'), 'nijmegen');
+assert.strictEqual(F.canon('F.C. København'), 'copenhagen');
+assert.strictEqual(F.canon('Union St.-Gilloise'), 'st gilloise');
+assert.strictEqual(F.canon('Peterborough United'), 'peterboro');
+assert.strictEqual(F.canon('Bristol Rovers'), 'bristol rvs');
+assert.strictEqual(F.canon('Athletic Club'), 'athletic bilbao');
+assert.strictEqual(F.canon('Charlton Athletic'), 'charlton athletic');
+const elo = [
+  { id: 'club:eng:manchester united', n: 1373, elo: 1800 },
+  { id: 'club:eng:manchester city', n: 1454, elo: 1850 },
+  { id: 'club:eng:mansfield', n: 1507, elo: 1500 },
+  { id: 'club:eng:bradford', n: 1503, elo: 1490 },
+  { id: 'club:eng:peterboro', n: 1517, elo: 1480 },
+  { id: 'club:den:copenhagen', n: 481, elo: 1600 },
+  { id: 'club:ned:nijmegen', n: 929, elo: 1550 },
+];
+assert.strictEqual(F.findTeam(elo, 'Mansfield Town', 'England').id, 'club:eng:mansfield');
+assert.strictEqual(F.findTeam(elo, 'Bradford City', 'England').id, 'club:eng:bradford');
+assert.strictEqual(F.findTeam(elo, 'Peterborough United', 'England').id, 'club:eng:peterboro');
+assert.strictEqual(F.findTeam(elo, 'Manchester United', 'England').id, 'club:eng:manchester united');
+assert.strictEqual(F.findTeam(elo, 'Manchester City', 'England').id, 'club:eng:manchester city');
+assert.strictEqual(F.findTeam(elo, 'F.C. København', 'Denmark').id, 'club:den:copenhagen');
+assert.strictEqual(F.findTeam(elo, 'N.E.C. Nijmegen', 'Netherlands').id, 'club:ned:nijmegen');
+assert.strictEqual(F.canon('D.C. United'), 'dc united');
+assert.strictEqual(F.canon('Mansfield Town'), 'mansfield');
+const mexican = [
+  { id: 'club:bra:santos', n: 839, elo: 1700 },
+  { id: 'club:mex:santos laguna', n: 877, elo: 1600 },
+  { id: 'club:ned:zwolle', n: 511, elo: 1550 },
+];
+assert.strictEqual(F.findTeam(mexican, 'Santos', 'Mexico').id, 'club:mex:santos laguna');
+assert.strictEqual(F.findTeam(mexican, 'Santos Laguna', 'Mexico').id, 'club:mex:santos laguna');
+assert.strictEqual(F.findTeam(mexican, 'Santos', 'Brazil').id, 'club:bra:santos');
+assert.strictEqual(F.findTeam(mexican, 'Zwolle', 'Belgium').id, 'club:ned:zwolle');
+const santos = { id: 'espn', ts: 5, status: 'upcoming', pred_low: true, n: [839, 597], teams: [{ name: 'Santos' }, { name: 'Pumas UNAM' }] };
+const laguna = { id: 's365', ts: 5, status: 'upcoming', pred_low: false, n: [877, 597], pred: { h: 0.4, d: 0.3, a: 0.3 }, teams: [{ name: 'Santos Laguna' }, { name: 'Pumas UNAM' }] };
+const oneFixture = F.dedupeMatches([santos, laguna]);
+assert.strictEqual(oneFixture.length, 1);
+assert.strictEqual(oneFixture[0].pred_low, false);
+assert.strictEqual(F.dedupeMatches([
+  { id: 'c', ts: 5, teams: [{ name: 'Manchester City' }, { name: 'Chelsea' }] },
+  { id: 'u', ts: 5, teams: [{ name: 'Manchester United' }, { name: 'Chelsea' }] },
+]).length, 2);
+
+let ft = { status: 'live', hg: 1, ag: 0, minute: 94, period: 2, ht: false, pred: { h: 0.5, d: 0.3, a: 0.2 }, lam: [1.2, 0.8] };
+assert.strictEqual(F.applyLive(ft, { status: 'finished', hg: 1, ag: 0, minute: 90, period: 2 }), true);
+assert.strictEqual(ft.status, 'finished');
+assert.strictEqual(ft.minute, 94);
+assert.strictEqual(ft.ht, false);
+let half = { status: 'live', hg: 0, ag: 0, minute: 47, period: 1, pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1.1, 0.9] };
+assert.strictEqual(F.applyLive(half, { status: 'live', hg: 0, ag: 0, minute: 45, period: 1, ht: true }), true);
+assert.strictEqual(half.minute, 47);
+assert.strictEqual(half.ht, true);
+assert.strictEqual(half.period, 1);
+assert.strictEqual(F.clockText(half), 'HT');
+const etRem = F.remaining(1.5, 1.2, 100, [0, 0], [0, 0], 3);
+const regRem = F.remaining(1.5, 1.2, 100, [0, 0], [0, 0], 2);
+assert.ok(etRem[0] > regRem[0], 'prodloužení má zbývající čas');
+assert.ok(F.remaining(1.5, 1.2, 120, [0, 0], [0, 0], 5)[0] < 0.01);
+const sofaEt = F.sofaMinute({ status: { type: 'inprogress', description: 'Extra time' }, time: { initial: 5400, currentPeriodStartTimestamp: 1000 } }, 1180);
+assert.strictEqual(sofaEt.period, 3);
+assert.strictEqual(sofaEt.minute, 93);
+assert.strictEqual(F.sofaMinute({ status: { description: 'Halftime' }, time: {} }, 0).ht, true);
+const pending = F.parse365({
+  id: 9, statusText: 'Pending', statusGroup: 3, gameTime: 12,
+  homeCompetitor: { name: 'A', score: 0 }, awayCompetitor: { name: 'B', score: 0 },
+  startTime: '2026-10-20T18:00:00Z', competitionDisplayName: 'Liga',
+});
+assert.strictEqual(pending.status, 'live');
+assert.strictEqual(pending.period, 1);
+const pens = F.parse365({
+  id: 10, statusText: 'Penalties', statusGroup: 3, gameTime: 120,
+  homeCompetitor: { name: 'A', score: 1 }, awayCompetitor: { name: 'B', score: 1 },
+  startTime: '2026-10-20T18:00:00Z',
+});
+assert.strictEqual(pens.status, 'live');
+assert.strictEqual(pens.period, 5);
+assert.strictEqual(F.clockText({ status: 'live', minute: 120, period: 5 }), 'PEN');
+assert.strictEqual(F.clockText({ status: 'live', minute: 100, period: 3 }), "100' ET");
+const espnHt = F.parseEspnEvent({
+  id: '77', date: '2026-10-20T18:00:00Z',
+  competitions: [{
+    status: { type: { name: 'STATUS_HALFTIME', state: 'in' }, displayClock: '45:00', period: 1 },
+    competitors: [
+      { homeAway: 'home', score: '1', team: { id: '1', displayName: 'A' } },
+      { homeAway: 'away', score: '0', team: { id: '2', displayName: 'B' } },
+    ],
+  }],
+});
+assert.strictEqual(espnHt.status, 'live');
+assert.strictEqual(espnHt.ht, true);
+assert.strictEqual(espnHt.minute, null);
+const day0 = F.pragueCalendar(0, Date.UTC(2026, 9, 20, 22, 30));
+const day1 = F.pragueCalendar(1, Date.UTC(2026, 9, 20, 22, 30));
+assert.strictEqual(day0.y, 2026);
+assert.strictEqual(day0.m, 10);
+assert.strictEqual(day0.d, 21);
+assert.strictEqual(day1.d, 22);
+assert.strictEqual(day1.w, (day0.w + 1) % 7);
+const gilloise = { id: 'sofa:1', ts: 1000, status: 'live', minute: 20, hg: 1, ag: 0, teams: [{ name: 'Union St.-Gilloise' }, { name: "Hapoel Be'er Sheva" }] };
+const gilloise2 = { id: 's365:2', ts: 1000, status: 'live', minute: 20, hg: 1, ag: 0, teams: [{ name: 'Union St. Gilloise' }, { name: 'Hapoel Beer Sheva' }] };
+const folded = F.dedupeMatches([gilloise, gilloise2]);
+assert.strictEqual(folded.length, 1);
+assert.ok(folded[0]._ids.indexOf('sofa:1') >= 0 && folded[0]._ids.indexOf('s365:2') >= 0);
+assert.strictEqual(folded[0].hg, 1);
+const reversed = { id: 'espn:3', ts: 1000, status: 'live', minute: 20, hg: 0, ag: 4, teams: [{ name: 'Hapoel Beer Sheva' }, { name: 'Union St. Gilloise' }] };
+const keptSide = F.dedupeMatches([gilloise, reversed]);
+assert.strictEqual(keptSide.length, 1);
+assert.strictEqual(keptSide[0].hg, 1);
+assert.strictEqual(keptSide[0].ag, 0);
+assert.strictEqual(keptSide[0].teams[0].name, 'Union St.-Gilloise');
+assert.strictEqual(F.dedupeMatches([gilloise, { id: 'x', ts: 1000, teams: [{ name: 'Arsenal' }, { name: 'Chelsea' }] }]).length, 2);
+assert.strictEqual(F.listVisible({ id: 'keep', _ids: ['keep', 'drop'], region: 'europe_top', status: 'live', day: 0, segment: 'main' }, { view: 'oblibene', fav: ['drop'] }), true);
+const pages = fs.readFileSync(path.join(__dirname, '../.github/workflows/pages.yml'), 'utf8');
+assert.ok(pages.includes("github.event_name == 'push'"));
+assert.ok(pages.includes('cancel-in-progress: false'));
+assert.ok(pages.includes('origin/main') && pages.includes('needs.build.outputs.deploy'));
+
 console.log('live ok');

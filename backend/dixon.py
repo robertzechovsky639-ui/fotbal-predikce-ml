@@ -123,15 +123,17 @@ def live_markets(hg, ag, lh_rem, la_rem, maxg=6):
     return markets_from_matrix(matrix, hg, ag)
 
 def remaining_lambdas(lh, la, minute, reds=(0, 0), score=(0, 0), period=1):
-    """lambda * zbývající/90, ke konci zápasu roste; červené karty a stav skóre. Po 90 min bez prodloužení."""
+    """lambda * zbývající/90. Prodloužení má vlastní zbytek do 120', penalty už ne."""
     minute = 0 if minute is None else float(minute)
     try:
         period = int(period or 1)
     except (TypeError, ValueError):
         period = 1
-    if period > 2 or minute >= 120:
+    if period >= 5 or minute >= 120:
         frac = 0.0
-        late = 1.0
+    elif period > 2:
+        m = min(120.0, max(minute, 90.0))
+        frac = (120.0 - m) / 90.0
     else:
         m = min(max(minute, 0.0), 99.0)
         regular = max(0.0, 90.0 - min(m, 90.0))
