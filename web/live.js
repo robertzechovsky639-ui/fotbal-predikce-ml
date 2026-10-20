@@ -143,11 +143,24 @@
     if (m.status === 'postponed' && upd.status === 'upcoming') return false;
     if (upd.status && rankStatus(upd.status) < rankStatus(m.status)) return false;
     const uh = upd.hg, ua = upd.ag;
-    if (m.hg != null && uh != null && uh < m.hg) return false;
-    if (m.ag != null && ua != null && ua < m.ag) return false;
     if (upd.minute != null && m.minute != null && upd.minute < m.minute) return false;
     if (upd.period != null && m.period != null && upd.period < m.period) return false;
     if (upd.reds && m.reds && (upd.reds[0] < m.reds[0] || upd.reds[1] < m.reds[1])) return false;
+    const drop = (m.hg != null && uh != null && uh < m.hg) || (m.ag != null && ua != null && ua < m.ag);
+    if (drop) {
+      if (stale) return false;
+      const sig = uh + '-' + ua;
+      const src = (token && token.src) || '';
+      const prev = m._var;
+      const confirmed = !!(prev && prev.sig === sig && ((src && prev.src !== src) || prev.n >= 1));
+      if (!confirmed) {
+        m._var = { sig, src, n: prev && prev.sig === sig && prev.src === src ? prev.n + 1 : 1 };
+        return false;
+      }
+      m._var = null;
+    } else if (m._var && uh != null && ua != null && uh >= m.hg && ua >= m.ag) {
+      m._var = null;
+    }
     const scoreUp = (uh != null && (m.hg == null || uh > m.hg)) || (ua != null && (m.ag == null || ua > m.ag));
     const minuteUp = upd.minute != null && (m.minute == null || upd.minute > m.minute);
     const statusUp = upd.status && rankStatus(upd.status) > rankStatus(m.status);
@@ -197,10 +210,12 @@
     let saw = false;
     for (const det of comp.details || []) {
       if (!det.redCard) continue;
-      saw = true;
-      const tid = det.team && String(det.team.id);
-      if (tid && tid === String(sides.home.team.id)) reds[0]++;
-      else reds[1]++;
+      const tid = det.team && det.team.id != null && det.team.id !== '' ? String(det.team.id) : '';
+      if (!tid) continue;
+      const homeId = sides.home.team && sides.home.team.id != null ? String(sides.home.team.id) : '';
+      const awayId = sides.away.team && sides.away.team.id != null ? String(sides.away.team.id) : '';
+      if (tid === homeId) { reds[0]++; saw = true; }
+      else if (tid === awayId) { reds[1]++; saw = true; }
     }
     const goals = side => {
       if (status === 'upcoming' || side.score == null || side.score === '') return null;
@@ -216,12 +231,18 @@
     };
   }
 
-  function sofaGoals(block, type) {
+  function sofaNum(raw) {
+    if (raw == null || raw === '') return null;
+    const n = +raw;
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  function sofaGoals(block) {
     if (!block) return null;
-    if (type === 'finished' && block.normaltime != null) return +block.normaltime;
-    if (block.current == null) return null;
-    const n = +block.current;
-    return n < 0 ? null : n;
+    return sofaNum(block.current);
+  }
+  function sofaRegulation(block) {
+    if (!block) return null;
+    return sofaNum(block.normaltime);
   }
   function sofaMinute(ev, nowSec) {
     const st = ev.status || {};
@@ -258,7 +279,8 @@
     return {
       id: 'sofa:' + ev.id, src: 'sofascore', ssid: ev.id, ts: ev.startTimestamp,
       status, minute: status === 'live' || status === 'finished' ? clock.minute : null, period: clock.period,
-      hg: sofaGoals(ev.homeScore, type), ag: sofaGoals(ev.awayScore, type),
+      hg: sofaGoals(ev.homeScore), ag: sofaGoals(ev.awayScore),
+      hg90: sofaRegulation(ev.homeScore), ag90: sofaRegulation(ev.awayScore),
       homeName: home, awayName: away, teams: [{ name: home }, { name: away }],
       league_name: (ev.tournament && ev.tournament.name) || '',
     };
@@ -338,17 +360,49 @@
     return upd;
   }
 
+  function idCanon(id) {
+    const parts = String(id || '').split(':');
+    if (parts[0] !== 'club' || parts.length < 3) return null;
+    return { code: parts[1], key: canon(parts.slice(2).join(':')) };
+  }
   function findTeam(teams, name, country) {
     const key = canon(name);
     const code = codeOf(country);
-    if (code) {
-      const id = 'club:' + code + ':' + key;
-      const hit = (teams || []).find(t => t.id === id);
-      if (hit) return hit;
+    const all = [];
+    for (const t of teams || []) {
+      const p = idCanon(t && t.id);
+      if (!p || p.key !== key) continue;
+      all.push(t);
     }
-    const hits = (teams || []).filter(t => t.id && t.id.endsWith(':' + key));
+    let hits = code ? all.filter(t => idCanon(t.id).code === code) : all;
+    if (!hits.length) hits = all;
     hits.sort((a, b) => (b.n || 0) - (a.n || 0));
     return hits[0] || null;
+  }
+  function mergeList(prev, payload) {
+    const prevGen = (prev && prev.generated) || 0;
+    const matches = (prev && prev.matches) || [];
+    if (!payload || !(payload.generated > prevGen)) return { generated: prevGen, matches, changed: false };
+    const byId = new Map();
+    for (const m of matches) if (m && m.id) byId.set(m.id, m);
+    const out = [];
+    const seen = new Set();
+    const keep = ['hg', 'ag', 'minute', 'period', 'status', 'reds', 'winner', 'live', 'pred', 'lam', 'rho', 'ou', 'btts', 'exact', '_accAt', '_lk', '_var'];
+    for (const raw of payload.matches || []) {
+      if (!raw || !raw.id) continue;
+      seen.add(raw.id);
+      const cur = byId.get(raw.id);
+      if (!cur) { out.push(raw); continue; }
+      const merged = Object.assign({}, cur, raw);
+      if (cur._accAt || cur.status === 'live') {
+        for (const k of keep) if (cur[k] != null) merged[k] = cur[k];
+      }
+      out.push(merged);
+    }
+    for (const m of matches) {
+      if (m && m.id && !seen.has(m.id) && m.status === 'live') out.push(m);
+    }
+    return { generated: payload.generated, matches: out, changed: true };
   }
   function priorOf(region) { return REGION_BASE[region] || 1450; }
   function listVisible(m, ui) {
@@ -403,7 +457,7 @@
 
   return {
     setRules, canon, codeOf, clubId, scoreMatrix, markets, liveMarkets, remaining, eloLambdas,
-    applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf, listVisible,
+    applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf, listVisible, mergeList, sofaGoals, sofaRegulation,
     parseEspnEvent, parseSofaEvent, parseSofaIncidents, parseSofaOdds, parse365, orient, alignUpdate, espnMinute, sofaMinute,
   };
 });

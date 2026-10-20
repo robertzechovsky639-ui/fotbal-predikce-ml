@@ -94,9 +94,14 @@ assert.strictEqual(flipped.hg, 1);
 assert.strictEqual(flipped.ag, 0);
 
 const sw = fs.readFileSync(path.join(__dirname, '../web/sw.js'), 'utf8');
-assert.ok(sw.includes("fotbal-v3"), 'verze cache');
+assert.ok(sw.includes('fotbal-__GIT_SHA__'), 'verze cache ze SHA');
+assert.ok(sw.includes('3000') && sw.includes('caches.match'), 'síť max 3 s, pak cache');
 const js = fs.readFileSync(path.join(__dirname, '../web/static.js'), 'utf8');
 assert.ok(!/const ymd = ymd\(/.test(js), 'ESPN datum nesmí stínit funkci ymd');
+assert.ok(js.includes('sofascore: 20000') && js.includes('sofascore: 30000'), 'celý Sofascore feed nejvýš 15–30 s');
+assert.ok(!/sofascore:\s*1500/.test(js) && !/sofascore:\s*2200/.test(js));
+assert.ok(js.includes('7 * 60 * 1000'), 'matches.json každých 7 min');
+assert.ok(js.includes('/event/'), 'detail zobrazených zápasů');
 const ui = { view: 'zapasy', day: 0, reg: 'focus', filt: 'live', favOnly: false, fav: [] };
 assert.strictEqual(F.listVisible({ id: 'sofa:9', region: 'asia', status: 'live', day: 0 }, ui), false);
 assert.strictEqual(F.listVisible({ id: 'espn:2', region: 'europe_cups', status: 'live', day: 0 }, ui), true);
@@ -137,5 +142,63 @@ assert.strictEqual(aligned.ag, 0);
 assert.strictEqual(F.applyLive(stored, aligned), true);
 assert.strictEqual(stored.hg, 2);
 assert.strictEqual(stored.ag, 0);
+
+const zw = F.findTeam([
+  { id: 'club:ned:zwolle', name: 'Zwolle', n: 511, elo: 1600 },
+  { id: 'club:ned:pec zwolle', name: 'PEC Zwolle', n: 1, elo: 1400 },
+], 'PEC Zwolle', 'Netherlands');
+assert.strictEqual(zw.id, 'club:ned:zwolle');
+const hv = F.findTeam([
+  { id: 'club:fra:le havre', n: 1227, elo: 1550 },
+  { id: 'club:fra:havre', n: 1, elo: 1300 },
+], 'Havre AC', 'France');
+assert.strictEqual(hv.id, 'club:fra:le havre');
+
+const varM = { status: 'live', hg: 2, ag: 0, minute: 50, period: 2, reds: [0, 0], pred: { h: 0.5, d: 0.3, a: 0.2 }, lam: [1.2, 1.0] };
+assert.strictEqual(F.applyLive(varM, { status: 'live', hg: 1, ag: 0, minute: 51 }, { src: 'espn', t0: 1 }, () => true), false);
+assert.strictEqual(varM.hg, 2);
+assert.strictEqual(F.applyLive(varM, { status: 'live', hg: 1, ag: 0, minute: 52 }, { src: 'sofascore', t0: 2 }, () => true), true);
+assert.strictEqual(varM.hg, 1);
+const var2 = { status: 'live', hg: 2, ag: 0, minute: 40, period: 2, reds: [0, 0], pred: { h: 0.5, d: 0.3, a: 0.2 }, lam: [1.2, 1.0] };
+const down = { status: 'live', hg: 1, ag: 0, minute: 41 };
+assert.strictEqual(F.applyLive(var2, down, { src: 'espn', t0: 3 }, () => true), false);
+assert.strictEqual(F.applyLive(var2, { status: 'live', hg: 2, ag: 0, minute: 42 }, { src: 'espn', t0: 4 }, () => true), true);
+assert.strictEqual(var2.hg, 2);
+assert.strictEqual(F.applyLive(var2, { status: 'live', hg: 1, ag: 0, minute: 43 }, { src: 'espn', t0: 5 }, () => true), false);
+assert.strictEqual(F.applyLive(var2, { status: 'live', hg: 1, ag: 0, minute: 44 }, { src: 'espn', t0: 6 }, () => true), true);
+assert.strictEqual(var2.hg, 1);
+
+const finEt = F.parseSofaEvent({
+  id: 9, homeTeam: { name: 'A' }, awayTeam: { name: 'B' },
+  status: { type: 'finished', description: 'AET' },
+  homeScore: { current: 2, normaltime: 1 }, awayScore: { current: 1, normaltime: 1 }, time: {},
+});
+assert.strictEqual(finEt.hg, 2);
+assert.strictEqual(finEt.hg90, 1);
+assert.strictEqual(finEt.ag90, 1);
+
+const noTeam = F.parseEspnEvent({
+  id: 3, date: '2026-10-18T15:00:00Z',
+  competitions: [{
+    status: { type: { state: 'in', name: 'STATUS_IN_PROGRESS' }, displayClock: "20'", period: 1 },
+    competitors: [
+      { homeAway: 'home', score: '1', team: { id: '10', displayName: 'Home FC' } },
+      { homeAway: 'away', score: '0', team: { id: '20', displayName: 'Away FC' } },
+    ],
+    details: [{ redCard: true, team: {} }, { redCard: true, team: { id: '10' } }],
+  }],
+});
+assert.deepStrictEqual(noTeam.reds, [1, 0]);
+
+const older = { generated: 10, matches: [{ id: 'a', status: 'live', hg: 2, ag: 0, minute: 60, _accAt: 5, pred: { h: 0.7, d: 0.2, a: 0.1 } }] };
+assert.strictEqual(F.mergeList(older, { generated: 9, matches: [{ id: 'a', status: 'live', hg: 0, ag: 0 }] }).changed, false);
+const newer = F.mergeList(older, { generated: 20, matches: [{ id: 'a', status: 'upcoming', hg: 0, ag: 0, minute: 0, pred: { h: 0.4, d: 0.3, a: 0.3 } }, { id: 'b', status: 'upcoming', hg: null }] });
+assert.strictEqual(newer.changed, true);
+assert.strictEqual(newer.matches.find(m => m.id === 'a').hg, 2);
+assert.strictEqual(newer.matches.find(m => m.id === 'a').pred.h, 0.7);
+assert.ok(newer.matches.some(m => m.id === 'b'));
+const kept = F.mergeList(older, { generated: 30, matches: [] });
+assert.strictEqual(kept.matches.length, 1);
+assert.strictEqual(kept.matches[0].id, 'a');
 
 console.log('live ok');

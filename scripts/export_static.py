@@ -1,8 +1,10 @@
 """Seznam zápasů, predikce a state.json pro GitHub Pages. Release modelu se odsud nenahrává."""
 import datetime as dt
 import json
+import os
 import pathlib
 import re
+import subprocess
 import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -332,10 +334,7 @@ def sofa_events(data):
     return []
 
 
-def sofa_goals(block, status):
-    if not isinstance(block, dict) or status == "upcoming":
-        return None
-    raw = block.get("normaltime") if status == "finished" and block.get("normaltime") is not None else block.get("current")
+def _score(raw):
     if raw is None:
         return None
     try:
@@ -343,6 +342,20 @@ def sofa_goals(block, status):
     except (TypeError, ValueError):
         return None
     return None if value < 0 else value
+
+
+def sofa_goals(block, status):
+    """Skóre na kartu. current zahrnuje prodloužení; normaltime se do zobrazení nedává."""
+    if not isinstance(block, dict) or status == "upcoming":
+        return None
+    return _score(block.get("current"))
+
+
+def sofa_regulation(block, status):
+    """90minutové skóre jen pro učení 1X2. Do zobrazení nepatří."""
+    if status != "finished" or not isinstance(block, dict):
+        return None
+    return _score(block.get("normaltime"))
 
 
 def sofa_clock(ev, status, now=None):
@@ -413,6 +426,8 @@ def fetch_sofa():
             "ts": int(start) if start else None, "status": status, "minute": minute if status == "live" else None,
             "period": period, "hg": sofa_goals(ev.get("homeScore") or {}, status),
             "ag": sofa_goals(ev.get("awayScore") or {}, status),
+            "hg90": sofa_regulation(ev.get("homeScore") or {}, status),
+            "ag90": sofa_regulation(ev.get("awayScore") or {}, status),
             "cup": cup, "neutral": region in {"europe_cups", "international"},
             "home_name": home, "away_name": away,
             "league_id": dataset_stable("", tourn, country, region, cup),
@@ -435,6 +450,7 @@ def orient_to(item, home_canon):
     flipped = dict(item)
     flipped["home_name"], flipped["away_name"] = item["away_name"], item["home_name"]
     flipped["hg"], flipped["ag"] = item.get("ag"), item.get("hg")
+    flipped["hg90"], flipped["ag90"] = item.get("ag90"), item.get("hg90")
     reds = list(item.get("reds") or [0, 0])
     flipped["reds"] = [reds[1], reds[0]] if len(reds) == 2 else reds
     odds = item.get("odds")
@@ -545,6 +561,7 @@ def public_match(item, pred):
         "pred_low": bool(pred["pred_low"]), "pred_note": pred["pred_note"],
         "odds": item.get("odds"),
         "elo": pred["elo"], "n": pred["n"],
+        "hg90": item.get("hg90"), "ag90": item.get("ag90"),
     }
 
 
@@ -552,12 +569,27 @@ def safe_name(mid):
     return re.sub(r"[^A-Za-z0-9._-]+", "_", mid)
 
 
+def git_sha():
+    env = os.environ.get("GITHUB_SHA") or ""
+    if env:
+        return env[:12]
+    try:
+        out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        return (out or "dev")[:12]
+    except (OSError, subprocess.CalledProcessError):
+        return "dev"
+
+
 def copy_web():
     DIST.mkdir(parents=True, exist_ok=True)
+    sha = git_sha()
     for path in WEB.iterdir():
         if path.suffix in {".html", ".css", ".js", ".svg", ".json"} or path.name == "manifest.json":
             target = DIST / path.name
-            target.write_bytes(path.read_bytes())
+            if path.name == "sw.js":
+                target.write_text(path.read_text(encoding="utf-8").replace("__GIT_SHA__", sha), encoding="utf-8")
+            else:
+                target.write_bytes(path.read_bytes())
     (DIST / ".nojekyll").write_text("", encoding="utf-8")
 
 
@@ -624,7 +656,9 @@ def main():
         if pub["status"] != "finished" or pub["hg"] is None:
             continue
         item = {
-            "id": pub["id"], "ts": pub["ts"], "status": "finished", "hg": pub["hg"], "ag": pub["ag"],
+            "id": pub["id"], "ts": pub["ts"], "status": "finished",
+            "hg": pub["hg90"] if pub.get("hg90") is not None else pub["hg"],
+            "ag": pub["ag90"] if pub.get("ag90") is not None else pub["ag"],
             "home_name": pub["teams"][0]["name"], "away_name": pub["teams"][1]["name"],
             "league_id": None, "region": pub["region"], "country": pub["country"], "neutral": pub["neutral"],
             "cup": pub.get("cup"), "league_name": pub["league_name"],

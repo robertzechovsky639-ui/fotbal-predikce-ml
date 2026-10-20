@@ -296,4 +296,6 @@ def load_runtime(blob):
             "_names": {item.get("name") or tid: 1},
         }
     state["h2h"] = {k: [list(x) for x in v] for k, v in (blob.get("h2h") or {}).items()}
+    import names
+    names.merge_clubs(state)
     return state

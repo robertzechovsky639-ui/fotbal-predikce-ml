@@ -15,6 +15,27 @@ import odds
 import online
 
 
+def test_affix_canon_merges_duplicates():
+    assert names.canon("PEC Zwolle") == names.canon("Zwolle") == "zwolle"
+    assert names.canon("Le Havre") == names.canon("Havre AC") == "havre"
+    assert names.canon("AJ Auxerre") == names.canon("Auxerre")
+    assert names.canon("NEC Nijmegen") == "nijmegen"
+    teams = {
+        "club:ned:zwolle": {"n": 511, "elo": 1600.0, "name": "Zwolle", "last": "2026-05-01"},
+        "club:ned:pec zwolle": {"n": 1, "elo": 1400.0, "name": "PEC Zwolle", "last": "2024-01-01"},
+        "club:fra:le havre": {"n": 1227, "elo": 1550.0, "name": "Le Havre", "last": "2026-05-01"},
+        "club:fra:havre": {"n": 1, "elo": 1300.0, "name": "Havre AC", "last": "2020-01-01"},
+    }
+    assert names.resolve_club(teams, "PEC Zwolle", "Netherlands") == "club:ned:zwolle"
+    assert names.resolve_club(teams, "Havre AC", "France") == "club:fra:le havre"
+    state = {"teams": {k: dict(v) for k, v in teams.items()}, "h2h": {"club:ned:pec zwolle|club:ned:zwolle": [["2024-01-01", "club:ned:pec zwolle", 0, 1]]}}
+    names.merge_clubs(state)
+    assert set(state["teams"]) == {"club:ned:zwolle", "club:fra:le havre"}
+    assert state["teams"]["club:ned:zwolle"]["n"] == 512
+    assert abs(state["teams"]["club:ned:zwolle"]["elo"] - ((1600 * 511) + 1400) / 512) < 1e-6
+    assert names.resolve_club(state["teams"], "PEC Zwolle", "ned") == "club:ned:zwolle"
+
+
 def test_canon_clubs():
     assert names.canon("Man United") == "manchester united"
     assert names.canon("Nott'm Forest") == "nottingham forest"
@@ -138,9 +159,15 @@ def test_workflows_keep_previous_model():
     assert "concurrency:" in learn and "cancel-in-progress: false" in learn
     assert "concurrency:" in pages and "cancel-in-progress: false" in pages
     assert "fetch_release.py" in learn and "fetch_release.py" in pages
+    assert "model-last-" not in pages
+    assert "state.json" in pages and "--clobber" in pages
     sys.path.insert(0, str(root / "scripts"))
     import fetch_release
     assert fetch_release.archive_ok(root / "README.md") is False
+    assert fetch_release.state_ok({"matches": []})
+    assert not fetch_release.state_ok({"matches": {}})
+    sw = (root / "web" / "sw.js").read_text(encoding="utf-8")
+    assert "__GIT_SHA__" in sw and "3000" in sw and "caches.match" in sw
 
 
 def test_online_dedupe():

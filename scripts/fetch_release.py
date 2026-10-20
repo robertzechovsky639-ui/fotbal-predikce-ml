@@ -43,7 +43,34 @@ def download_asset(name, dest):
     return False
 
 
+def state_ok(payload):
+    if isinstance(payload, (bytes, str)):
+        try:
+            payload = json.loads(payload)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return False
+    return isinstance(payload, dict) and isinstance(payload.get("matches"), list)
+
+
+def _write_state(obj):
+    target = ROOT / "data" / "online" / "state.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    print("state.json", len(obj["matches"]))
+
+
 def pull_state():
+    """Nejdřív asset release `model` (state.json --clobber). Pages je záloha, když release ještě není."""
+    dest = INCOMING / "state.json"
+    if download_asset("state.json", dest) and dest.is_file():
+        try:
+            obj = json.loads(dest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            obj = None
+        if state_ok(obj):
+            _write_state(obj)
+            return
+        print("state.json v release není použitelný")
     url = f"https://{REPO.split('/')[0]}.github.io/{REPO.split('/')[1]}/data/state.json"
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:
@@ -52,14 +79,8 @@ def pull_state():
     except Exception as exc:
         print("state.json z Pages není:", exc)
         return
-    if isinstance(obj, dict) and isinstance(obj.get("matches"), list):
-        PUBLISHED.parent.mkdir(parents=True, exist_ok=True)
-        PUBLISHED.write_bytes(data if isinstance(data, bytes) else data)
-        # export čte data/online/state.json; publikovaný stav má přednost, ať se zápas neztratí mezi běhy
-        target = ROOT / "data" / "online" / "state.json"
-        if not target.exists() or True:
-            target.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
-        print("state.json z Pages", len(obj["matches"]))
+    if state_ok(obj):
+        _write_state(obj)
 
 
 def main():
