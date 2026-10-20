@@ -14,6 +14,19 @@ assert.notStrictEqual(F.canon("Sparta Rotterdam"), F.canon("Sparta Prague"));
 const mk = F.markets(1.4, 1.1, -0.05);
 const sum = mk.p[0] + mk.p[1] + mk.p[2];
 assert.ok(Math.abs(sum - 1) < 1e-9, 'poisson 1X2');
+assert.ok(mk.ou['1.5'].over > mk.ou['2.5'].over && mk.ou['2.5'].over > mk.ou['3.5'].over, 'over klesá s linií');
+assert.ok(Math.abs(mk.over - mk.ou['2.5'].over) < 1e-12);
+assert.ok(mk.teams.home.ou['0.5'].over > mk.teams.home.ou['1.5'].over && mk.teams.home.ou['1.5'].over > mk.teams.home.ou['2.5'].over);
+assert.ok(Math.abs(mk.teams.home.xg + mk.teams.away.xg - mk.total.xg) < 1e-9);
+assert.ok(mk.total.dist.reduce((s, row) => s + row[1], 0) > 0.95);
+assert.strictEqual(mk.teams.home.mode[0], mk.teams.home.dist.slice().sort((a, b) => b[1] - a[1])[0][0]);
+['1.5', '2.5', '3.5'].forEach(line => assert.ok(Math.abs(mk.ou[line].over + mk.ou[line].under - 1) < 1e-9));
+const liveEarly = F.liveMarkets(0, 0, ...F.remaining(1.5, 1.2, 12, [0, 0], [0, 0], 1));
+const liveLate = F.liveMarkets(0, 0, ...F.remaining(1.5, 1.2, 82, [0, 0], [0, 0], 2));
+assert.ok(liveEarly.ou['2.5'].over > liveLate.ou['2.5'].over, 'pozdě 0-0 snižuje over 2,5');
+const already = F.liveMarkets(2, 0, 0.05, 0.05);
+assert.ok(already.ou['1.5'].over > 0.99);
+assert.ok(already.ou['2.5'].over < 0.2);
 
 const early = F.remaining(1.5, 1.2, 30, [0, 0], [0, 0], 1);
 const late = F.remaining(1.5, 1.2, 85, [0, 0], [0, 0], 2);
@@ -200,5 +213,48 @@ assert.ok(newer.matches.some(m => m.id === 'b'));
 const kept = F.mergeList(older, { generated: 30, matches: [] });
 assert.strictEqual(kept.matches.length, 1);
 assert.strictEqual(kept.matches[0].id, 'a');
+
+const goalM = {
+  status: 'live', hg: 0, ag: 0, minute: 15, period: 1, reds: [0, 0],
+  pred: { h: 0.45, d: 0.28, a: 0.27 }, lam: [1.5, 1.15], teams: [{ name: 'Sparta' }, { name: 'Slavia' }],
+};
+F.liveCalc(goalM);
+const ouBefore = goalM.live.ouLines['2.5'].over;
+const xgBefore = goalM.live.xg[0] + goalM.live.xg[1];
+const homeBefore = goalM.live.teams.home.xg;
+assert.ok(xgBefore > 0.5 && xgBefore < 3, 'živě xG je očekávaný konečný součet');
+assert.ok(goalM.live.teams.home.ou['0.5'].over > goalM.live.teams.home.ou['2.5'].over);
+assert.ok(goalM.live.total.dist.length >= 3);
+assert.strictEqual(F.applyLive(goalM, { status: 'live', hg: 0, ag: 0, minute: 10 }, { src: 'espn', t0: 1 }, () => false), false);
+assert.strictEqual(goalM.live.ouLines['2.5'].over, ouBefore, 'starší minuta nevrátí over');
+assert.strictEqual(goalM.live.teams.home.xg, homeBefore, 'starší minuta nevrátí góly týmu');
+assert.strictEqual(F.applyLive(goalM, { status: 'live', hg: 0, ag: 0, minute: 80, period: 2 }, { src: 'espn', t0: 2 }, () => true), true);
+assert.ok(goalM.live.ouLines['2.5'].over < ouBefore, 'čerstvá pozdní minuta smí over snížit');
+assert.ok(goalM.live.xg[0] + goalM.live.xg[1] < xgBefore);
+assert.ok(goalM.live.teams.home.xg < homeBefore);
+const label = F.goalText(goalM);
+assert.ok(label.home.includes('nejč.') && label.home.includes('O0,5') && label.home.includes('O2,5'));
+assert.ok(label.away.includes('O1,5'));
+assert.ok(label.total.includes('O1,5') && label.total.includes('O2,5') && label.total.includes('O3,5'));
+const redM = { status: 'live', hg: 0, ag: 0, minute: 30, period: 1, reds: [1, 0], pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1.5, 1.2] };
+const openM = { status: 'live', hg: 0, ag: 0, minute: 30, period: 1, reds: [0, 0], pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1.5, 1.2] };
+F.liveCalc(redM); F.liveCalc(openM);
+assert.ok(redM.live.teams.home.xg < openM.live.teams.home.xg, 'červená sníží očekávané góly týmu');
+assert.ok(redM.live.teams.away.xg > openM.live.teams.away.xg);
+const two = { status: 'live', hg: 2, ag: 0, minute: 70, period: 2, reds: [0, 0], pred: { h: 0.5, d: 0.3, a: 0.2 }, lam: [1.4, 1.1] };
+F.liveCalc(two);
+assert.ok(two.live.teams.home.ou['0.5'].over > 0.99 && two.live.teams.home.ou['1.5'].over > 0.99);
+assert.ok(two.live.teams.home.mode[0] >= 2);
+assert.ok(two.live.total.xg > 2);
+const pre = { status: 'upcoming', teams: [{ name: 'A' }, { name: 'B' }], region: 'czech', country: 'cze' };
+F.ensurePred(pre, { teams: [], elo_params: { ha: 50, coef: 0.75, base_h: 1.48, base_a: 1.18 } });
+assert.ok(pre.ou.lines['1.5'].over > pre.ou.lines['3.5'].over);
+assert.ok(pre.teams_goals.home.ou['0.5'].over > pre.teams_goals.home.ou['2.5'].over);
+assert.ok(pre.total_goals.dist.length >= 3 && pre.xg[0] > 0);
+assert.ok(F.goalText(pre).home.includes('O0,5') && F.goalText(pre).total.includes('nejč.'));
+const learn = fs.readFileSync(path.join(__dirname, '../.github/workflows/learn.yml'), 'utf8');
+assert.ok(learn.includes('goals_h.txt') && learn.includes('goals_meta.json'));
+const sw2 = fs.readFileSync(path.join(__dirname, '../web/sw.js'), 'utf8');
+assert.ok(sw2.includes('fotbal-__GIT_SHA__') && !/fotbal-[0-9a-f]{7,}/.test(sw2.replace('__GIT_SHA__', '')));
 
 console.log('live ok');

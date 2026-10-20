@@ -71,7 +71,12 @@ async function staticApi(u) {
     const r = await fetch('data/m/' + fileId(id) + '.json', { cache: 'no-cache' });
     const d = await r.json();
     const live = ST.byId[id];
-    if (live) { d.status = live.status; d.hg = live.hg; d.ag = live.ag; d.minute = live.minute; d.pred = live.pred; d.live = live.live; d.reds = live.reds; }
+    if (live) {
+      d.status = live.status; d.hg = live.hg; d.ag = live.ag; d.minute = live.minute; d.period = live.period;
+      d.pred = live.pred; d.live = live.live; d.reds = live.reds;
+      d.lam = live.lam; d.xg = live.xg; d.ou = live.ou; d.btts = live.btts; d.exact = live.exact;
+      d.teams_goals = live.teams_goals; d.total_goals = live.total_goals;
+    }
     return d;
   }
   if (u.startsWith('/api/predict')) {

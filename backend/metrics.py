@@ -48,6 +48,69 @@ def rps(y, probs):
 def pack(y, probs):
     return {"n": len(y), "accuracy": accuracy(y, probs), "log_loss": log_loss(y, probs), "rps": rps(y, probs)}
 
+def _bin(prob):
+    return min(1 - 1e-12, max(1e-12, float(prob)))
+
+def binary_log_loss(y, probs):
+    if not y:
+        return None
+    total = 0.0
+    for truth, prob in zip(y, probs):
+        p = _bin(prob)
+        t = 1.0 if truth else 0.0
+        total -= t * math.log(p) + (1.0 - t) * math.log(1.0 - p)
+    return total / len(y)
+
+def brier(y, probs):
+    if not y:
+        return None
+    total = 0.0
+    for truth, prob in zip(y, probs):
+        t = 1.0 if truth else 0.0
+        total += (float(prob) - t) ** 2
+    return total / len(y)
+
+def binary_pack(y, probs):
+    return {"n": len(y), "log_loss": binary_log_loss(y, probs), "brier": brier(y, probs)}
+
+def _mean_metric(blob, key):
+    vals = [blob[name][key] for name in ("ou15", "ou25", "ou35", "btts") if blob.get(name) and blob[name].get(key) is not None]
+    if not vals:
+        block = blob.get("mean") or {}
+        return block.get(key)
+    return sum(vals) / len(vals)
+
+def goals_gate(after, before, baseline, previous=None):
+    """Směs gólů musí porazit frekvenci na log loss i Brier a nesmí být horší než Dixon-Coles/Poisson."""
+    reasons = []
+    ok = True
+    a_ll, b_ll, f_ll = _mean_metric(after, "log_loss"), _mean_metric(before, "log_loss"), _mean_metric(baseline, "log_loss")
+    a_br, b_br, f_br = _mean_metric(after, "brier"), _mean_metric(before, "brier"), _mean_metric(baseline, "brier")
+    if None in (a_ll, b_ll, f_ll, a_br, b_br, f_br):
+        return False, "chybí metriky gólových trhů"
+    if a_ll > f_ll - 0.005:
+        ok = False
+        reasons.append("log loss gólových trhů není aspoň o 0,005 lepší než frekvence")
+    if a_br > f_br - 0.002:
+        ok = False
+        reasons.append("Brier gólových trhů není aspoň o 0,002 lepší než frekvence")
+    if a_ll > b_ll + 0.001:
+        ok = False
+        reasons.append("log loss je horší než Dixon-Coles/Poisson")
+    if a_br > b_br + 0.001:
+        ok = False
+        reasons.append("Brier je horší než Dixon-Coles/Poisson")
+    prev = (previous or {}).get("test", {}).get("after") if isinstance(previous, dict) else None
+    if prev:
+        p_ll, p_br = _mean_metric(prev, "log_loss"), _mean_metric(prev, "brier")
+        if p_ll is not None and a_ll > p_ll + 0.01:
+            ok = False
+            reasons.append("log loss gólů je o víc než 0,01 horší než minule")
+        if p_br is not None and a_br > p_br + 0.005:
+            ok = False
+            reasons.append("Brier gólů je o víc než 0,005 horší než minule")
+    return ok, ("; ".join(reasons) if reasons else "brána gólů prošla")
+
 def gate(model, baseline, elo, previous=None):
     """Model musí porazit frekvenční baseline na log loss i RPS a nesmí být horší než Elo."""
     reasons = []

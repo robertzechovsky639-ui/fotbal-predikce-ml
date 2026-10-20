@@ -9,8 +9,10 @@ sys.path.insert(0, str(ROOT / "backend"))
 import dataset
 import dixon
 import elo
+import goals
 import metrics
 import names
+import numpy as np
 import odds
 import online
 
@@ -152,6 +154,63 @@ Sat Jul 25 2026
     assert rows2[0]["date"] == dt.date(2026, 7, 25)
 
 
+def test_goal_blend_keeps_poisson_without_booster():
+    assert goals.apply_match(None, [0.0] * 26, 1.2, 0.9) == (1.2, 0.9)
+    mixed = goals.blend_lambdas(1.0, 1.0, 2.0, 0.4, 0.5)
+    assert mixed == pytest.approx((1.5, 0.7))
+
+
+def test_goal_lines_live_and_gate():
+    mk = dixon.markets(1.45, 1.15, -0.05)
+    assert mk["lines"]["1.5"]["over"] > mk["lines"]["2.5"]["over"] > mk["lines"]["3.5"]["over"]
+    assert mk["over"] == pytest.approx(mk["lines"]["2.5"]["over"])
+    for line in ("1.5", "2.5", "3.5"):
+        assert mk["lines"][line]["over"] + mk["lines"][line]["under"] == pytest.approx(1)
+    early = dixon.live_markets(0, 0, *dixon.remaining_lambdas(1.5, 1.2, 10, (0, 0), (0, 0), 1))
+    late = dixon.live_markets(0, 0, *dixon.remaining_lambdas(1.5, 1.2, 80, (0, 0), (0, 0), 2))
+    assert early["lines"]["2.5"]["over"] > late["lines"]["2.5"]["over"]
+    done = dixon.live_markets(2, 1, 0.05, 0.05)
+    assert done["lines"]["2.5"]["over"] > 0.99
+    need = dixon.live_markets(2, 0, 0.05, 0.05)
+    assert need["lines"]["1.5"]["over"] > 0.99
+    assert need["lines"]["2.5"]["over"] < 0.2
+    home = mk["teams"]["home"]
+    away = mk["teams"]["away"]
+    assert home["ou"]["0.5"]["over"] > home["ou"]["1.5"]["over"] > home["ou"]["2.5"]["over"]
+    assert away["ou"]["0.5"]["over"] + away["ou"]["0.5"]["under"] == pytest.approx(1)
+    assert home["mode"][0] == max(home["dist"], key=lambda item: item[1])[0]
+    assert mk["total"]["xg"] == pytest.approx(home["xg"] + away["xg"])
+    assert sum(p for _, p in mk["total"]["dist"]) > 0.95
+    assert [k for k, _ in mk["total"]["dist"]] == sorted(k for k, _ in mk["total"]["dist"])
+    assert abs(home["xg"] - 1.45) < 0.2
+    led = need["teams"]["home"]
+    assert led["ou"]["0.5"]["over"] > 0.99 and led["ou"]["1.5"]["over"] > 0.99
+    assert led["ou"]["2.5"]["over"] < 0.2 and led["mode"][0] >= 2
+    assert need["total"]["xg"] == pytest.approx(led["xg"] + need["teams"]["away"]["xg"])
+    red = dixon.live_markets(0, 0, *dixon.remaining_lambdas(1.5, 1.2, 40, (1, 0), (0, 0), 1))
+    plain = dixon.live_markets(0, 0, *dixon.remaining_lambdas(1.5, 1.2, 40, (0, 0), (0, 0), 1))
+    assert red["lines"]["2.5"]["over"] != pytest.approx(plain["lines"]["2.5"]["over"], abs=1e-4)
+    assert red["teams"]["home"]["xg"] < plain["teams"]["home"]["xg"]
+    assert red["teams"]["away"]["xg"] > plain["teams"]["away"]["xg"]
+    lh, la = 1.7, 0.9
+    cal = dixon.calibrate(lh, la, 0.0, [0.25, 0.28, 0.47])
+    scaled = goals.rescale_total(cal[0], cal[1], lh + la)
+    assert scaled[0] + scaled[1] == pytest.approx(lh + la)
+    assert scaled[0] / scaled[1] == pytest.approx(cal[0] / cal[1])
+    probs = goals.batch_binary(np.array([1.4, 0.8]), np.array([1.1, 1.3]), np.array([-0.08, 0.0]))
+    for i, (h, a, rho) in enumerate(((1.4, 1.1, -0.08), (0.8, 1.3, 0.0))):
+        one = dixon.markets(h, a, rho)
+        assert probs["ou15"][i] == pytest.approx(one["lines"]["1.5"]["over"], abs=1e-6)
+        assert probs["ou25"][i] == pytest.approx(one["over"], abs=1e-6)
+        assert probs["ou35"][i] == pytest.approx(one["lines"]["3.5"]["over"], abs=1e-6)
+        assert probs["btts"][i] == pytest.approx(one["btts"], abs=1e-6)
+    packed = lambda ll, br: {"mean": {"log_loss": ll, "brier": br}}
+    ok, _ = metrics.goals_gate(packed(0.60, 0.20), packed(0.62, 0.21), packed(0.70, 0.24))
+    assert ok
+    bad, reason = metrics.goals_gate(packed(0.69, 0.23), packed(0.62, 0.21), packed(0.70, 0.24))
+    assert not bad and reason
+
+
 def test_workflows_keep_previous_model():
     root = pathlib.Path(__file__).resolve().parents[1]
     learn = (root / ".github/workflows/learn.yml").read_text(encoding="utf-8")
@@ -161,6 +220,7 @@ def test_workflows_keep_previous_model():
     assert "fetch_release.py" in learn and "fetch_release.py" in pages
     assert "model-last-" not in pages
     assert "state.json" in pages and "--clobber" in pages
+    assert "goals_h.txt" in learn and "goals_a.txt" in learn and "goals_meta.json" in learn
     sys.path.insert(0, str(root / "scripts"))
     import fetch_release
     assert fetch_release.archive_ok(root / "README.md") is False
