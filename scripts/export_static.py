@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
+import competitions
 import elo
 import names
 import online
@@ -57,7 +58,6 @@ FOCUS = {
     "eng.1", "esp.1", "ger.1", "ita.1", "fra.1", "ned.1", "por.1", "cze.1",
     "uefa.champions", "uefa.europa", "uefa.europa.conf",
 }
-WOMEN = ("(w)", " women", "woman", "femen", "feminin", "frauen", " ladies", "u17", "u18", "u19", "u20", "u21", "u23", "youth", "junior", "damen")
 SKIP_STATUS = {"postponed", "cancelled", "canceled", "abandoned"}
 
 
@@ -85,45 +85,8 @@ def minute_of(clock):
     return int(found.group(1)) if found else None
 
 
-def women(name):
-    low = (name or "").lower()
-    return any(token in low for token in WOMEN)
-
-
 def region_of(slug, country):
-    meta = SLUG_META.get(slug)
-    if meta:
-        return meta[1]
-    if slug.startswith(("uefa.champions", "uefa.europa")):
-        return "europe_cups"
-    if slug.startswith("conmebol."):
-        return "south_america"
-    if country == "cze":
-        return "czech"
-    if country in elo.JAN_COUNTRIES and country in {"bra", "arg", "chi", "col", "per", "uru", "par", "ecu", "ven", "bol"}:
-        return "south_america"
-    if country in {"jpn", "chn", "kor", "ksa", "aus", "ind"}:
-        return "asia"
-    if country in {"usa", "mex"}:
-        return "other"
-    if country in {"eng", "esp", "ger", "ita", "fra", "ned", "por"} and slug.endswith(".1"):
-        return "europe_top"
-    if slug.startswith(("fifa.", "uefa.nations")):
-        return "international"
-    return "europe_lower"
-
-
-def slug_country(slug):
-    meta = SLUG_META.get(slug)
-    if meta and meta[0]:
-        return meta[0]
-    prefix = slug.split(".")[0]
-    mapped = {"ger": "ger", "eng": "eng", "esp": "esp", "ita": "ita", "fra": "fra", "ned": "ned", "por": "por",
-              "bel": "bel", "tur": "tur", "gre": "gre", "sco": "sco", "cze": "cze", "arg": "arg", "bra": "bra",
-              "chn": "chn", "jpn": "jpn", "ksa": "ksa", "usa": "usa", "mex": "mex", "den": "den", "nor": "nor",
-              "swe": "swe", "sui": "sui", "aut": "aut", "rou": "rou", "rus": "rus", "irl": "irl", "chi": "chi",
-              "col": "col", "per": "per", "uru": "uru", "par": "par", "ecu": "ecu", "aus": "aus", "ind": "ind"}
-    return mapped.get(prefix)
+    return competitions.classify({"src": "espn", "slug": slug or "", "country_code": country})["region"]
 
 
 def hinted_league(slug, league_name, country, region, cup):
@@ -167,8 +130,6 @@ def espn_events(slug, ymd):
         if not home or not away:
             continue
         hn, an = home["team"].get("displayName"), away["team"].get("displayName")
-        if women(hn) or women(an) or women(league_name):
-            continue
         stype = (comp.get("status") or {}).get("type") or {}
         name = stype.get("name") or ""
         state = stype.get("state") or "pre"
@@ -210,18 +171,16 @@ def espn_events(slug, ymd):
                 reds[0] += 1
             elif side and str(side) == str(away["team"].get("id")):
                 reds[1] += 1
-        country = slug_country(slug)
-        region = region_of(slug, country)
-        cup = bool(SLUG_META.get(slug, (None, None, None, "cup" in slug))[3]) or "cup" in slug or "copa" in slug
+        cls = competitions.classify({"src": "espn", "slug": slug, "home": hn, "away": an, "label": league_name})
         item = blank()
         item.update({
             "id": f"espn:{ev['id']}", "src": "espn", "league": slug, "league_name": league_name,
-            "region": region, "country": country, "ts": iso_ts(ev["date"]), "status": status,
+            "ts": iso_ts(ev["date"]), "status": status,
             "minute": minute, "period": period, "hg": goals(home), "ag": goals(away), "reds": reds,
-            "neutral": region in {"europe_cups", "international"}, "cup": cup,
             "home_name": hn, "away_name": an,
-            "league_id": hinted_league(slug, league_name, country, region, cup),
+            "league_id": hinted_league(slug, league_name, cls["country"], cls["region"], cls["cup"]),
         })
+        item.update(cls)
         out.append(item)
     return slug, out
 
@@ -264,12 +223,13 @@ def fetch_365(dates):
         print("365 selhalo", exc)
         return []
     countries = {c["id"]: c.get("name") for c in data.get("countries") or []}
+    comps = {c["id"]: c for c in data.get("competitions") or []}
     out = []
     for game in data.get("games") or []:
         home, away = competitors_365(game)
         hn, an = home.get("name"), away.get("name")
         league_name = game.get("competitionDisplayName") or ""
-        if not hn or not an or women(hn) or women(an) or women(league_name):
+        if not hn or not an:
             continue
         text = (game.get("statusText") or "")
         low = text.lower()
@@ -296,13 +256,12 @@ def fetch_365(dates):
             if val < 0:
                 return None
             return val
-        country = names.code_of(countries.get(home.get("countryId")))
-        cup = any(w in league_name.lower() for w in ("cup", "copa", "pokal", "champions", "libertadores", "sudamericana"))
-        region = "europe_cups" if any(w in league_name.lower() for w in ("champions league", "europa league", "conference")) else None
-        if region is None and any(w in league_name.lower() for w in ("libertadores", "sudamericana")):
-            region = "south_america"
-        if region is None:
-            region = region_of("", country)
+        comp = comps.get(game.get("competitionId")) or {}
+        cls = competitions.classify({
+            "src": "s365", "competition_id": game.get("competitionId"),
+            "country_name": countries.get(comp.get("countryId")), "home": hn, "away": an,
+            "label": league_name,
+        })
         item = blank()
         minute = game.get("gameTime")
         try:
@@ -311,14 +270,15 @@ def fetch_365(dates):
             minute = None
         item.update({
             "id": f"s365:{game.get('id')}", "src": "s365", "league": f"s365.{game.get('competitionId')}",
-            "league_name": league_name, "region": region, "country": country,
+            "league_name": league_name,
             "ts": iso_ts(game.get("startTime")), "status": status, "minute": minute,
             "period": 3 if "penalt" in low or "extra" in low else (2 if (minute or 0) > 45 else 1),
-            "hg": goals(home), "ag": goals(away), "cup": cup,
-            "neutral": region in {"europe_cups", "international"},
+            "hg": goals(home), "ag": goals(away),
             "home_name": hn, "away_name": an,
-            "league_id": dataset_stable("", league_name, country, region, cup),
+            "country_raw": countries.get(comp.get("countryId")),
+            "league_id": dataset_stable("", league_name, cls["country"], cls["region"], cls["cup"]),
         })
+        item.update(cls)
         out.append(item)
     print("365 zápasů", len(out))
     return out
@@ -396,7 +356,7 @@ def fetch_sofa():
         home = (ev.get("homeTeam") or {}).get("name")
         away = (ev.get("awayTeam") or {}).get("name")
         tourn = ((ev.get("tournament") or {}).get("name")) or ""
-        if not home or not away or women(home) or women(away) or women(tourn):
+        if not home or not away:
             continue
         kind = ((ev.get("status") or {}).get("type") or "")
         desc = str((ev.get("status") or {}).get("description") or "").lower()
@@ -412,26 +372,28 @@ def fetch_sofa():
             status = "abandoned"
         else:
             status = "upcoming"
-        country = names.code_of(((ev.get("tournament") or {}).get("category") or {}).get("name"))
-        cup = any(w in tourn.lower() for w in ("cup", "copa", "champions", "libertadores", "sudamericana"))
-        region = "europe_cups" if any(w in tourn.lower() for w in ("champions league", "europa league", "conference")) else region_of("", country)
-        if "libertadores" in tourn.lower() or "sudamericana" in tourn.lower():
-            region = "south_america"
+        cat = ((ev.get("tournament") or {}).get("category") or {})
+        ut = ((ev.get("tournament") or {}).get("uniqueTournament") or {})
+        cls = competitions.classify({
+            "src": "sofa", "tournament_id": ut.get("id"), "tournament_slug": ut.get("slug"),
+            "country_name": cat.get("name"), "home": home, "away": away, "label": tourn,
+        })
         start = ev.get("startTimestamp")
         minute, period = sofa_clock(ev, status)
         item = blank()
         item.update({
             "id": f"sofa:{ev.get('id')}", "src": "sofa", "league": f"sofa.{(ev.get('tournament') or {}).get('id')}",
-            "league_name": tourn, "region": region, "country": country,
+            "league_name": tourn,
             "ts": int(start) if start else None, "status": status, "minute": minute if status == "live" else None,
             "period": period, "hg": sofa_goals(ev.get("homeScore") or {}, status),
             "ag": sofa_goals(ev.get("awayScore") or {}, status),
             "hg90": sofa_regulation(ev.get("homeScore") or {}, status),
             "ag90": sofa_regulation(ev.get("awayScore") or {}, status),
-            "cup": cup, "neutral": region in {"europe_cups", "international"},
             "home_name": home, "away_name": away,
-            "league_id": dataset_stable("", tourn, country, region, cup),
+            "ut": ut.get("id"), "ut_slug": ut.get("slug"), "country_raw": cat.get("name"),
+            "league_id": dataset_stable("", tourn, cls["country"], cls["region"], cls["cup"]),
         })
+        item.update(cls)
         if item["ts"]:
             out.append(item)
     print("sofascore živě", len(out))
@@ -582,7 +544,11 @@ def _public_ou(ou):
 def public_match(item, pred):
     return {
         "id": item["id"], "src": item["src"], "league": item["league"], "league_name": item["league_name"],
-        "region": item["region"], "country": item["country"], "ts": item["ts"], "status": item["status"],
+        "region": item["region"], "country": item["country"], "country_name": item.get("country_name"),
+        "country_raw": item.get("country_raw"),
+        "tier": item.get("tier"), "segment": item.get("segment") or "main", "tags": item.get("tags") or [],
+        "ut": item.get("ut"), "ut_slug": item.get("ut_slug"),
+        "ts": item["ts"], "status": item["status"],
         "minute": item["minute"], "period": item["period"], "hg": item["hg"], "ag": item["ag"],
         "reds": item["reds"], "winner": winner_of(item), "neutral": bool(item.get("neutral")),
         "cup": bool(item.get("cup")),

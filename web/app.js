@@ -5,7 +5,8 @@ const S = { view: 'zapasy', day: 0, reg: 'focus', filt: 'all', favOnly: false, f
 const DN = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
 const pct = x => x == null ? '–' : Math.round(x * 100) + ' %';
 const f2 = x => x == null ? '–' : (+x).toFixed(2);
-const REG_LABEL = { europe_top: 'Evropa – nejvyšší', europe_lower: 'Evropa – nižší', czech: 'Česko', europe_cups: 'Evropské poháry', asia: 'Asie', south_america: 'Jižní Amerika', international: 'Reprezentace', other: 'Ostatní' };
+const REG_LABEL = { europe_top: 'Evropa – nejvyšší', europe_lower: 'Evropa – nižší', czech: 'Česko', europe_cups: 'Evropské poháry', asia: 'Asie', south_america: 'Jižní Amerika', international: 'Reprezentace', other: 'Ostatní', special: 'Mládež, rezervy, univerzity' };
+const TAG_LABEL = { women: 'ženy', college: 'univerzita', youth: 'mládež', reserve: 'rezerva' };
 function saveFav() { localStorage.fotbalFav = JSON.stringify([...S.fav]); }
 function probs(m) { return (m.live && m.live.p) || m.pred || { h: null, d: null, a: null }; }
 function scoreSig(m) {
@@ -29,17 +30,16 @@ function upd() {
   const el = $('#upd'); if (el && el._h !== html) { el._h = html; el.innerHTML = html; }
 }
 
-function focusOk(m) { return m.region === 'europe_top' || m.region === 'czech' || m.region === 'europe_cups'; }
+function metaLine(m) {
+  const bits = [REG_LABEL[m.region] || m.region || ''];
+  if (m.country_name) bits.push(m.country_name);
+  else if (m.country) bits.push(m.country);
+  if (m.tier) bits.push(m.tier + '. liga');
+  for (const tag of m.tags || []) if (TAG_LABEL[tag]) bits.push(TAG_LABEL[tag]);
+  return bits.filter(Boolean).join(' · ');
+}
 function filt(list) {
-  return list.filter(m => {
-    if (S.reg === 'focus' && !focusOk(m)) return false;
-    if (S.reg !== 'all' && S.reg !== 'focus' && m.region !== S.reg) return false;
-    if (S.filt === 'live' && m.status !== 'live') return false;
-    if (S.filt === 'up' && m.status !== 'upcoming') return false;
-    if (S.filt === 'fin' && m.status !== 'finished') return false;
-    if (S.favOnly && !S.fav.has(m.id)) return false;
-    return true;
-  });
+  return list.filter(m => Fotbal.listVisible(m, S));
 }
 function scoreText(m) {
   if (m.hg == null || m.ag == null) return '';
@@ -72,10 +72,10 @@ function matchesView(fav) {
   const all = fav ? ST.all.filter(m => S.fav.has(m.id)) : filt(ST.all.filter(m => m.day === S.day || (S.day === 0 && m.status === 'live')));
   if (!all.length) return h + `<div class="empty">${ST.all.length ? 'Žádné zápasy pro zvolený filtr.' : 'Načítám…'}${fav ? '<br>Hvězdičkou v detailu přidáš oblíbené.' : ''}</div>`;
   const g = {};
-  for (const m of all) { const k = (m.league_name || m.league || 'Soutěž') + '|' + (m.region || ''); (g[k] = g[k] || []).push(m); }
+  for (const m of all) { const k = (m.league_name || m.league || 'Soutěž') + '|' + (m.region || '') + '|' + (m.country || '') + '|' + (m.segment || ''); (g[k] = g[k] || []).push(m); }
   for (const k in g) {
     const m = g[k][0];
-    h += `<div class="grp"><div class="ghead"><div>${esc(m.league_name || m.league)}<small>${esc(REG_LABEL[m.region] || m.region || '')}${m.country ? ' · ' + esc(m.country) : ''}</small></div></div>${g[k].map(card).join('')}</div>`;
+    h += `<div class="grp"><div class="ghead"><div>${esc(m.league_name || m.league)}<small>${esc(metaLine(m))}</small></div></div>${g[k].map(card).join('')}</div>`;
   }
   return h;
 }
@@ -166,7 +166,7 @@ function drawDetail() {
   const el = $('#detail'); el.classList.remove('hidden');
   const p = probs(d);
   const score = d.hg == null ? '–' : (d.hg + ' : ' + d.ag);
-  let h = `<div class="dh"><button class="back" id="bk">‹</button><div class="tt"><b>${esc(d.league_name || '')}</b><small>${esc(REG_LABEL[d.region] || '')}</small></div><button class="star ${S.fav.has(d.id) ? 'on' : ''}" id="fv">${S.fav.has(d.id) ? '★' : '☆'}</button></div>
+  let h = `<div class="dh"><button class="back" id="bk">‹</button><div class="tt"><b>${esc(d.league_name || '')}</b><small>${esc(metaLine(d))}</small></div><button class="star ${S.fav.has(d.id) ? 'on' : ''}" id="fv">${S.fav.has(d.id) ? '★' : '☆'}</button></div>
     <div class="score"><div class="pp"><div class="av">${esc((d.teams[0].name || '?').slice(0, 2).toUpperCase())}</div><b>${esc(d.teams[0].name)}</b></div>
     <div class="mid"><div class="big">${score}</div><small>${d.status === 'live' ? 'živě ' + (d.minute != null ? d.minute + "'" : '') : d.status === 'finished' ? 'konec' : new Date(d.ts * 1000).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
     <div class="pp"><div class="av">${esc((d.teams[1].name || '?').slice(0, 2).toUpperCase())}</div><b>${esc(d.teams[1].name)}</b></div></div>
@@ -298,8 +298,14 @@ function paintListNow(ids) {
   if (visKey() !== S.vis) { render(); return; }
   let missing = false;
   for (const id of ids) {
-    const m = ST.byId[id]; if (!m || !Fotbal.listVisible(m, S)) continue;
-    const el = document.querySelector('.m[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    const m = ST.byId[id];
+    const sel = '.m[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
+    if (m && m._reclass) { delete m._reclass; missing = true; continue; }
+    if (!m || !Fotbal.listVisible(m, S)) {
+      if (document.querySelector(sel)) missing = true;
+      continue;
+    }
+    const el = document.querySelector(sel);
     if (!el) { missing = true; continue; }
     if (!patchCard(el, m)) {
       const tmp = document.createElement('div'); tmp.innerHTML = card(m);

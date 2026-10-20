@@ -257,4 +257,78 @@ assert.ok(learn.includes('goals_h.txt') && learn.includes('goals_meta.json'));
 const sw2 = fs.readFileSync(path.join(__dirname, '../web/sw.js'), 'utf8');
 assert.ok(sw2.includes('fotbal-__GIT_SHA__') && !/fotbal-[0-9a-f]{7,}/.test(sw2.replace('__GIT_SHA__', '')));
 
+const comp = JSON.parse(fs.readFileSync(path.join(__dirname, '../web/comp_rules.json'), 'utf8'));
+F.setComp(comp);
+assert.strictEqual(F.classify({ src: 'sofa', country_name: 'England Amateur', label: 'Isthmian League, Division One North', home: 'Bowers & Pitsea', away: 'Redbridge' }).region, 'europe_lower');
+assert.strictEqual(F.classify({ src: 'sofa', country_name: 'Brazil Amateur', home: 'Salto FC U12', away: 'X U12' }).segment, 'youth');
+assert.strictEqual(F.classify({ src: 's365', competition_id: 5566, country_name: 'USA', label: 'NWSL' }).segment, 'women');
+assert.strictEqual(F.classify({ src: 'sofa', country_name: 'USA', label: 'NCAA III, Upper Midwest Athletic Conference', home: 'Crown Polars', away: 'Martin Luther Knights' }).segment, 'college');
+const prom = F.classify({ src: 's365', competition_id: 8124, country_name: 'Panama', home: 'Herrera II', away: 'CD Universitario II' });
+assert.strictEqual(prom.region, 'other');
+assert.strictEqual(prom.country, 'pan');
+assert.strictEqual(prom.segment, 'reserve');
+assert.strictEqual(prom.cup, false);
+assert.ok(prom.tags.indexOf('reserve') >= 0);
+const ncaa = F.classify({ src: 'sofa', tournament_id: 36031, tournament_slug: 'ncaa-division-iii', country_name: 'USA', home: 'Augsburg', away: 'Bethany Lutheran' });
+assert.strictEqual(ncaa.region, 'other');
+assert.strictEqual(ncaa.country, 'usa');
+assert.strictEqual(ncaa.segment, 'college');
+assert.notStrictEqual(ncaa.region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 's365', competition_id: 573, country_name: 'Belgium', home: 'Club Brugge', away: 'Sporting' }).region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 's365', competition_id: 7685, country_name: 'Europe' }).region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'uefa.europa' }).region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'uefa.europa.conf' }).region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'uefa.super_cup' }).region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'uefa.euro' }).region, 'international');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'uefa.nations' }).region, 'international');
+assert.notStrictEqual(F.classify({ src: 'espn', slug: 'uefa.europa' }).region, 'international');
+const crc = F.classify({ src: 'espn', slug: 'crc.1' });
+assert.strictEqual(crc.region, 'other');
+assert.strictEqual(crc.country, 'crc');
+assert.strictEqual(crc.tier, 1);
+assert.strictEqual(F.classify({ src: 'espn', slug: 'eng.1' }).region, 'europe_top');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'eng.1' }).tier, 1);
+assert.strictEqual(F.classify({ src: 'espn', slug: 'eng.2' }).region, 'europe_lower');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'eng.2' }).tier, 2);
+assert.strictEqual(F.classify({ src: 'espn', slug: 'cze.1' }).region, 'czech');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'bel.1' }).region, 'europe_lower');
+assert.strictEqual(F.classify({ src: 'espn', slug: 'usa.usl.1' }).tier, null);
+assert.strictEqual(F.classify({ src: 's365', competition_id: 999999 }).region, 'other');
+assert.notStrictEqual(F.classify({ src: 's365', competition_id: 999999 }).region, 'europe_cups');
+assert.strictEqual(F.classify({ src: 's365', competition_id: 1, country_name: 'Algeria' }).region, 'other');
+assert.strictEqual(F.classify({ src: 's365', competition_id: 1, country_name: 'Egypt' }).country, 'egy');
+const promStored = F.classifyStored({ league: 's365.8124', region: 'europe_cups', country: null, country_raw: 'Panama', teams: [{ name: 'Herrera II' }, { name: 'CD Universitario II' }], league_name: 'Liga Prom - Apertura - Western Conference - North Zone' });
+assert.strictEqual(promStored.region, 'other');
+assert.strictEqual(promStored.segment, 'reserve');
+assert.strictEqual(promStored.country, 'pan');
+const sofaNcaa = F.parseSofaEvent({
+  id: 1, startTimestamp: 1, status: { type: 'inprogress', description: '1st half' },
+  homeTeam: { name: 'Augsburg' }, awayTeam: { name: 'Bethany Lutheran' },
+  homeScore: { current: 0 }, awayScore: { current: 0 },
+  time: { currentPeriodStartTimestamp: 10, initial: 0, max: 2700 },
+  tournament: { id: 192723, name: 'NCAA III, Upper Midwest Athletic Conference', category: { name: 'USA', id: 26 }, uniqueTournament: { id: 36031, slug: 'ncaa-division-iii' } },
+}, 70);
+assert.strictEqual(sofaNcaa.region, 'other');
+assert.strictEqual(sofaNcaa.segment, 'college');
+assert.notStrictEqual(sofaNcaa.region, 'europe_cups');
+F.set365Index([{ id: 8124, countryId: 146 }], [{ id: 146, name: 'Panama' }]);
+const fromIndex = F.classifyStored({ league: 's365.8124', region: 'europe_cups', country: 'per', teams: [{ name: 'Herrera II' }, { name: 'CD Universitario II' }] });
+assert.strictEqual(fromIndex.country, 'pan');
+assert.strictEqual(fromIndex.region, 'other');
+const live365ctx = F.parse365(Object.assign({}, fx('s365_live.json'), { competitionId: 8135 }), { comps: { 8135: { id: 8135, countryId: 19 } }, countries: { 19: 'Asia' } });
+assert.strictEqual(live365ctx.region, 'asia');
+assert.strictEqual(live365ctx.cup, true);
+const uiCup = { view: 'zapasy', day: 0, reg: 'europe_cups', filt: 'live', favOnly: false, fav: [] };
+assert.strictEqual(F.listVisible({ id: 's365:1', region: 'other', country: 'pan', segment: 'reserve', tags: ['reserve'], status: 'live', day: 0 }, uiCup), false);
+assert.strictEqual(F.listVisible({ id: 'sofa:2', region: 'other', country: 'usa', segment: 'college', tags: ['college'], status: 'live', day: 0 }, uiCup), false);
+assert.strictEqual(F.listVisible({ id: 'sofa:2', region: 'other', segment: 'college', tags: ['college'], status: 'live', day: 0 }, { view: 'zapasy', day: 0, reg: 'all', filt: 'live', favOnly: false, fav: [] }), false);
+assert.strictEqual(F.listVisible({ id: 'sofa:2', region: 'other', segment: 'college', tags: ['college'], status: 'live', day: 0 }, { view: 'zapasy', day: 0, reg: 'focus', filt: 'live', favOnly: false, fav: [] }), false);
+assert.strictEqual(F.listVisible({ id: 'sofa:2', region: 'other', segment: 'college', tags: ['college'], status: 'live', day: 0 }, { view: 'zapasy', day: 0, reg: 'special', filt: 'live', favOnly: false, fav: [] }), true);
+assert.strictEqual(F.listVisible({ id: 'espn:2', region: 'europe_cups', status: 'live', day: 0 }, uiCup), true);
+assert.strictEqual(F.listVisible({ id: 'sofa:2', region: 'other', segment: 'college', status: 'live', day: 0 }, { view: 'oblibene', day: 0, reg: 'focus', filt: 'all', favOnly: false, fav: ['sofa:2'] }), true);
+assert.ok(sw.includes('comp_rules.json'));
+assert.ok(js.includes('comp_rules.json') && js.includes('setComp'));
+assert.ok(!js.includes("m.region = m.region || 'europe_lower'"));
+assert.ok(!js.includes('function women'));
+
 console.log('live ok');
