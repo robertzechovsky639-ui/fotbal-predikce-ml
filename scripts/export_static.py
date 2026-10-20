@@ -545,6 +545,28 @@ def _public_line(block):
     return {"over": round(float(block["over"]), 4), "under": round(float(block["under"]), 4)}
 
 
+def _public_side(side):
+    if not side:
+        return None
+    ou = {name: _public_line(block) for name, block in (side.get("ou") or {}).items()}
+    mode = side.get("mode") or [0, 0]
+    return {
+        "xg": round(float(side["xg"]), 4),
+        "ou": ou,
+        "mode": [int(mode[0]), round(float(mode[1]), 4)],
+        "dist": [[int(k), round(float(p), 4)] for k, p in (side.get("dist") or [])],
+    }
+
+
+def _public_total(total):
+    packed = _public_side(total)
+    if not packed:
+        return None
+    lines = (total or {}).get("lines") or {}
+    packed["lines"] = {name: _public_line(block) for name, block in lines.items()}
+    return packed
+
+
 def _public_ou(ou):
     lines = (ou or {}).get("lines") or {}
     packed = {}
@@ -570,7 +592,15 @@ def public_match(item, pred):
         ],
         "pred": {"h": round(pred["pred"][0], 4), "d": round(pred["pred"][1], 4), "a": round(pred["pred"][2], 4)},
         "lam": [round(pred["lam"][0], 4), round(pred["lam"][1], 4)],
-        "xg": [round(pred["lam"][0], 4), round(pred["lam"][1], 4)],
+        "xg": [
+            round(float((pred.get("teams_goals") or {}).get("home", {}).get("xg", pred["lam"][0])), 4),
+            round(float((pred.get("teams_goals") or {}).get("away", {}).get("xg", pred["lam"][1])), 4),
+        ],
+        "teams_goals": {
+            "home": _public_side((pred.get("teams_goals") or {}).get("home")),
+            "away": _public_side((pred.get("teams_goals") or {}).get("away")),
+        } if pred.get("teams_goals") else None,
+        "total_goals": _public_total(pred.get("total_goals")),
         "rho": round(pred["rho"], 4),
         "ou": _public_ou(pred["ou"]),
         "btts": round(pred["btts"], 4),

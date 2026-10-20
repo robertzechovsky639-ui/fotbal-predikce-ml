@@ -69,9 +69,36 @@
     for (let i = 0; i <= maxg; i++) for (let j = 0; j <= maxg; j++) m[i][j] /= total;
     return m;
   }
+  function countMarket(mass, ouLines) {
+    const keys = Object.keys(mass).map(Number).sort((a, b) => a - b);
+    if (!keys.length) {
+      const ou = {};
+      ouLines.forEach(line => { ou[line.toFixed(1)] = { over: 0, under: 1 }; });
+      return { xg: 0, ou, mode: [0, 1], dist: [[0, 1]] };
+    }
+    let sum = 0, xg = 0, modeK = keys[0], modeP = -1;
+    keys.forEach(k => {
+      const p = mass[k];
+      sum += p;
+      xg += k * p;
+      if (p > modeP || (p === modeP && k < modeK)) { modeP = p; modeK = k; }
+    });
+    sum = sum || 1;
+    const ou = {};
+    ouLines.forEach(line => {
+      const need = line + 0.5;
+      let over = 0;
+      keys.forEach(k => { if (k >= need) over += mass[k]; });
+      ou[line.toFixed(1)] = { over: over / sum, under: 1 - over / sum };
+    });
+    const dist = [];
+    keys.forEach(k => { const p = mass[k] / sum; if (p >= 0.004) dist.push([k, p]); });
+    return { xg: xg / sum, ou, mode: [modeK, modeP / sum], dist };
+  }
   function marketsFrom(matrix, baseH, baseA) {
     let home = 0, draw = 0, away = 0, btts = 0;
     const overs = { '1.5': 0, '2.5': 0, '3.5': 0 };
+    const homeC = {}, awayC = {}, totC = {};
     const exact = [];
     const n = matrix.length;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
@@ -83,13 +110,22 @@
       if (goals >= 3) overs['2.5'] += p;
       if (goals >= 4) overs['3.5'] += p;
       if (H >= 1 && A >= 1) btts += p;
+      homeC[H] = (homeC[H] || 0) + p;
+      awayC[A] = (awayC[A] || 0) + p;
+      totC[goals] = (totC[goals] || 0) + p;
       exact.push([H + '-' + A, p]);
     }
     const t = home + draw + away || 1;
     exact.sort((a, b) => b[1] - a[1]);
     const ou = {};
     ['1.5', '2.5', '3.5'].forEach(line => { ou[line] = { over: overs[line], under: 1 - overs[line] }; });
-    return { p: [home / t, draw / t, away / t], over: overs['2.5'], under: 1 - overs['2.5'], ou, btts, exact: exact.slice(0, 5) };
+    const teams = {
+      home: countMarket(homeC, [0.5, 1.5, 2.5]),
+      away: countMarket(awayC, [0.5, 1.5, 2.5]),
+    };
+    const summed = countMarket(totC, [1.5, 2.5, 3.5]);
+    const total = { xg: summed.xg, ou: summed.ou, mode: summed.mode, dist: summed.dist, lines: ou };
+    return { p: [home / t, draw / t, away / t], over: overs['2.5'], under: 1 - overs['2.5'], ou, btts, exact: exact.slice(0, 5), teams, total };
   }
   function markets(lh, la, rho) { return marketsFrom(scoreMatrix(lh, la, rho || 0, 8), 0, 0); }
   function liveMarkets(hg, ag, lh, la) { return marketsFrom(scoreMatrix(Math.max(lh, 1e-4), Math.max(la, 1e-4), 0, 6), hg, ag); }
@@ -440,7 +476,9 @@
     const mk = markets(lam[0], lam[1], 0);
     m.pred = { h: +mk.p[0].toFixed(4), d: +mk.p[1].toFixed(4), a: +mk.p[2].toFixed(4) };
     m.lam = lam; m.rho = 0;
-    m.xg = [lam[0], lam[1]];
+    m.xg = [mk.teams.home.xg, mk.teams.away.xg];
+    m.teams_goals = mk.teams;
+    m.total_goals = mk.total;
     m.ou = { over: mk.over, under: mk.under, line: 2.5, lines: mk.ou };
     m.btts = mk.btts;
     m.exact = mk.exact.map(x => [x[0], +x[1].toFixed(4)]);
@@ -456,28 +494,42 @@
   function goalView(m) {
     if (!m) return null;
     const live = m.status === 'live' && m.live;
-    const lines = (live && m.live.ouLines) || (m.ou && m.ou.lines) || null;
+    const lines = (live && m.live.ouLines) || (m.ou && m.ou.lines) || (live && m.live.total && m.live.total.lines) || null;
     let over25 = null;
     if (lines && lines['2.5']) over25 = lines['2.5'].over;
     else if (live && m.live.ou != null) over25 = m.live.ou;
     else if (m.ou) over25 = m.ou.over;
     const btts = live ? m.live.btts : m.btts;
-    const xg = live && m.live.xg ? m.live.xg : (m.xg || m.lam || null);
+    const teams = (live && m.live.teams) || m.teams_goals || null;
+    const total = (live && m.live.total) || m.total_goals || null;
+    let xg = live && m.live.xg ? m.live.xg : (m.xg || m.lam || null);
+    if (teams && teams.home && teams.away) xg = [teams.home.xg, teams.away.xg];
     const exact = (live && m.live.exact) || m.exact || null;
-    return { xg, over25, btts, lines, exact };
+    return { xg, over25, btts, lines, exact, teams, total };
   }
   function goalText(m) {
     const view = goalView(m);
     if (!view || !view.xg) return null;
     const n = v => (Math.round(+v * 100) / 100).toFixed(2);
     const pc = v => v == null ? '–' : Math.round(+v * 100) + ' %';
-    const top = view.exact && view.exact[0] ? view.exact[0][0] + ' ' + pc(view.exact[0][1]) : '–';
-    return {
-      xg: (m.status === 'live' ? 'xG teď ' : 'xG ') + n(view.xg[0]) + '–' + n(view.xg[1]),
-      ou: 'O2,5 ' + pc(view.over25),
-      btts: 'oba ' + pc(view.btts),
-      exact: top,
+    const side = (block, fallback) => {
+      if (!block) return n(fallback);
+      const ou = block.ou || {};
+      const o = k => ou[k] ? pc(ou[k].over) : '–';
+      const mode = block.mode ? block.mode[0] + ' (' + pc(block.mode[1]) + ')' : '–';
+      return n(block.xg) + ' · nejč. ' + mode + ' · O0,5 ' + o('0.5') + ' · O1,5 ' + o('1.5') + ' · O2,5 ' + o('2.5');
     };
+    const tot = view.total;
+    let totalLine;
+    if (tot) {
+      const src = tot.lines || view.lines || {};
+      const o = k => src[k] ? pc(src[k].over) : '–';
+      const mode = tot.mode ? tot.mode[0] + ' (' + pc(tot.mode[1]) + ')' : '–';
+      totalLine = n(tot.xg) + ' · nejč. ' + mode + ' · O1,5 ' + o('1.5') + ' · O2,5 ' + o('2.5') + ' · O3,5 ' + o('3.5');
+    } else {
+      totalLine = n((+view.xg[0]) + (+view.xg[1])) + ' · O2,5 ' + pc(view.over25);
+    }
+    return { home: side(view.teams && view.teams.home, view.xg[0]), away: side(view.teams && view.teams.away, view.xg[1]), total: totalLine };
   }
 
   function liveCalc(m) {
@@ -492,7 +544,9 @@
       ouLines: mk.ou,
       btts: mk.btts,
       exact: mk.exact,
-      xg: [(m.hg || 0) + rem[0], (m.ag || 0) + rem[1]],
+      xg: [mk.teams.home.xg, mk.teams.away.xg],
+      teams: mk.teams,
+      total: mk.total,
       rem,
     };
     m._lk = key;

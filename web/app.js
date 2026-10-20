@@ -11,7 +11,7 @@ function probs(m) { return (m.live && m.live.p) || m.pred || { h: null, d: null,
 function scoreSig(m) {
   const p = probs(m);
   const g = Fotbal.goalText(m);
-  const goal = g ? g.xg + g.ou + g.btts + g.exact : '';
+  const goal = g ? g.home + g.away + g.total : '';
   return [m.status, m.hg, m.ag, m.minute, m.period, (m.reds || []).join(','), p.h == null ? '' : Math.round(p.h * 100), Math.round((p.d || 0) * 100), Math.round((p.a || 0) * 100), m.pred_low ? 1 : 0, goal].join('|');
 }
 function visKey() {
@@ -50,8 +50,7 @@ function card(m) {
   const t = new Date(m.ts * 1000).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Prague' });
   const line = (i) => `<div class="row"><div class="pl ${m.winner === i ? 'w' : ''}">${esc(m.teams[i].name)}</div><div class="scoreline">${m.status === 'upcoming' ? (i === 0 ? t : '') : (i === 0 ? (m.hg ?? '') : (m.ag ?? ''))}</div></div>`;
   const tri = p.h == null ? '<div class="na">Predikce se počítá…</div>' : `<div class="lbl">${m.status === 'live' ? 'PREDIKCE TEĎ' : 'PREDIKCE'}${m.pred_low ? ' <span class="low">nižší jistota</span>' : ''}</div><div class="tri"><div class="h"><b>${pct(p.h)}</b>1</div><div class="d"><b>${pct(p.d)}</b>X</div><div class="a"><b>${pct(p.a)}</b>2</div></div>`;
-  const gt = Fotbal.goalText(m);
-  const gl = gt ? `<div class="gl"><span>${esc(gt.xg)}</span><span>${esc(gt.ou)}</span><span>${esc(gt.btts)}</span><span>${esc(gt.exact)}</span></div>` : '';
+  const gl = goalHtml(m);
   const live = m.status === 'live' ? `<span class="livebadge">▶ ${m.minute != null ? m.minute + "'" : 'živě'}</span>` : '';
   return `<div class="m" data-id="${esc(m.id)}" data-sig="${esc(scoreSig(m))}">${line(0)}${line(1)}${live}${tri}${gl}${m.odds ? `<div class="odds"><span>1 ${f2(m.odds.h)}</span><span>X ${f2(m.odds.d)}</span><span>2 ${f2(m.odds.a)}</span></div>` : ''}</div>`;
 }
@@ -128,8 +127,7 @@ function render() {
 function showPred(box, nameA, nameB) {
   const m = { teams: [{ name: nameA }, { name: nameB }], region: 'europe_top', country: null, neutral: false };
   Fotbal.ensurePred(m, { teams: ST.teams, elo_params: ST.model && ST.model.elo_params });
-  const gt = Fotbal.goalText(m);
-  const gl = gt ? `<div class="gl"><span>${esc(gt.xg)}</span><span>${esc(gt.ou)}</span><span>${esc(gt.btts)}</span><span>${esc(gt.exact)}</span></div>` : '';
+  const gl = goalHtml(m);
   box.innerHTML = `<div class="tri" style="margin-top:12px"><div class="h"><b>${pct(m.pred.h)}</b>1</div><div class="d"><b>${pct(m.pred.d)}</b>X</div><div class="a"><b>${pct(m.pred.a)}</b>2</div></div>${gl}<p class="note">${esc(m.pred_note || '')} Elo ${m.elo[0]} : ${m.elo[1]}</p>`;
 }
 function bind() {
@@ -179,19 +177,55 @@ function drawDetail() {
   $('#fv').onclick = () => { S.fav.has(d.id) ? S.fav.delete(d.id) : S.fav.add(d.id); saveFav(); drawDetail(); };
   el.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.t; drawDetail(); });
 }
+function goalHtml(m) {
+  const gt = Fotbal.goalText(m);
+  if (!gt) return '';
+  return `<div class="gl"><div class="gt"><span class="k">Domácí</span><span class="v">${esc(gt.home)}</span></div><div class="gt"><span class="k">Hosté</span><span class="v">${esc(gt.away)}</span></div><div class="gt"><span class="k">Celkem</span><span class="v">${esc(gt.total)}</span></div></div>`;
+}
+function ouRows(ou, keys) {
+  if (!ou) return '';
+  return keys.map(key => {
+    const row = ou[key];
+    if (!row) return '';
+    const label = key.replace('.', ',');
+    return `<div class="fac"><span>Over ${label}</span><b>${pct(row.over)}</b></div><div class="fac"><span>Under ${label}</span><b>${pct(row.under)}</b></div>`;
+  }).join('');
+}
+function countChips(block) {
+  if (!block || !block.dist) return '';
+  const mode = block.mode ? block.mode[0] : null;
+  return `<div class="chips">${block.dist.map(([k, p]) => `<span class="${k === mode ? 'on' : ''}">${k} ${pct(p)}</span>`).join('')}</div>`;
+}
+function distBars(block) {
+  if (!block || !block.dist || !block.dist.length) return '';
+  const max = Math.max.apply(null, block.dist.map(x => x[1]));
+  const mode = block.mode ? block.mode[0] : null;
+  return block.dist.map(([k, p]) => `<div class="dist${k === mode ? ' on' : ''}"><b>${k}</b><span class="track"><i style="width:${Math.max(4, Math.round(100 * p / max))}%"></i></span><span>${pct(p)}</span></div>`).join('');
+}
+function sideBox(title, block) {
+  if (!block) return '';
+  return `<div class="box"><h3>${esc(title)}</h3>
+    <div class="pp2"><div><b>${f2(block.xg)}</b><small>očekávané góly</small></div><div><b>${block.mode ? block.mode[0] : '–'}</b><small>nejpravděpodobněji ${block.mode ? pct(block.mode[1]) : ''}</small></div></div>
+    ${ouRows(block.ou, ['0.5', '1.5', '2.5'])}${countChips(block)}</div>`;
+}
 function goalBlock(d) {
   const g = Fotbal.goalView(d);
   if (!g || !g.xg) return '';
-  const line = (label, key) => {
-    const row = g.lines && g.lines[key];
-    if (!row) return '';
-    return `<div class="fac"><span>Over ${label}</span><b>${pct(row.over)}</b></div><div class="fac"><span>Under ${label}</span><b>${pct(row.under)}</b></div>`;
-  };
-  const liveNote = d.status === 'live' ? '<p class="note">Živě: zbývající čas, aktuální skóre a červené karty. Starší odpověď skóre nevrací.</p>' : '<p class="note">1X2 je po 90 minutách. Góly jsou očekávaný počet za zápas.</p>';
-  return `<div class="box"><h3>${d.status === 'live' ? 'GÓLY TEĎ' : 'GÓLY'}</h3>
-    <div class="pp2"><div><b>${f2(g.xg[0])}</b><small>xG domácí</small></div><div><b>${f2(g.xg[1])}</b><small>xG hosté</small></div></div>
-    ${line('1,5', '1.5')}${line('2,5', '2.5')}${line('3,5', '3.5')}
-    <div class="fac"><span>Oba dají gól</span><b>${pct(g.btts)}</b></div>${liveNote}</div>`;
+  const live = d.status === 'live';
+  const homeName = (d.teams && d.teams[0] && d.teams[0].name) || 'Domácí';
+  const awayName = (d.teams && d.teams[1] && d.teams[1].name) || 'Hosté';
+  const total = g.total;
+  const lines = (total && total.lines) || g.lines;
+  const note = live
+    ? '<p class="note">Živě: konečný počet gólů ze skóre, minuty a červených karet. Starší odpověď skóre nevrací.</p>'
+    : '<p class="note">Očekávané góly a počty jsou za celý zápas. 1X2 je po 90 minutách.</p>';
+  const totalBox = `<div class="box"><h3>${live ? 'ZÁPAS CELKEM TEĎ' : 'ZÁPAS CELKEM'}</h3>
+    <div class="pp2"><div><b>${f2(total ? total.xg : (+g.xg[0] + +g.xg[1]))}</b><small>očekávaný součet</small></div><div><b>${total && total.mode ? total.mode[0] : '–'}</b><small>nejpravděpodobněji ${total && total.mode ? pct(total.mode[1]) : ''}</small></div></div>
+    ${ouRows(lines, ['1.5', '2.5', '3.5'])}
+    <div class="fac"><span>Oba dají gól</span><b>${pct(g.btts)}</b></div>
+    ${distBars(total)}${note}</div>`;
+  if (!g.teams) return totalBox;
+  return `${sideBox((live ? 'TEĎ · ' : '') + homeName, g.teams.home)}${sideBox((live ? 'TEĎ · ' : '') + awayName, g.teams.away)}${totalBox}`;
 }
 function tPre(d, p) {
   return `<div class="box"><div class="tri"><div class="h"><b>${pct(p.h)}</b>1</div><div class="d"><b>${pct(p.d)}</b>X</div><div class="a"><b>${pct(p.a)}</b>2</div></div>
@@ -235,12 +269,11 @@ function patchCard(el, m) {
   if (gt && !gl) return false;
   if (!gt && gl) return false;
   if (gt && gl) {
-    const spans = gl.querySelectorAll('span');
-    if (spans.length < 4) return false;
-    spans[0].textContent = gt.xg;
-    spans[1].textContent = gt.ou;
-    spans[2].textContent = gt.btts;
-    spans[3].textContent = gt.exact;
+    const vals = gl.querySelectorAll('.gt .v');
+    if (vals.length < 3) return false;
+    vals[0].textContent = gt.home;
+    vals[1].textContent = gt.away;
+    vals[2].textContent = gt.total;
   }
   const badge = el.querySelector('.livebadge');
   if (badge) badge.textContent = '▶ ' + (m.minute != null ? m.minute + "'" : 'živě');

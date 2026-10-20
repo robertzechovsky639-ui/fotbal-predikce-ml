@@ -111,7 +111,9 @@ def predict_fixture(state, dc_models, booster, blend_w, elo_params, league_count
     return {
         "home_id": home_id, "away_id": away_id,
         "pred": probs, "lam": [lh, la], "rho": rho,
-        "xg": [lh, la],
+        "xg": [mk["teams"]["home"]["xg"], mk["teams"]["away"]["xg"]],
+        "teams_goals": mk["teams"],
+        "total_goals": mk["total"],
         "ou": {"over": mk["over"], "under": mk["under"], "line": 2.5, "lines": mk["lines"]},
         "btts": mk["btts"], "exact": mk["exact"],
         "pred_low": low, "pred_note": note,

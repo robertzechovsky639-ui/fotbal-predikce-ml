@@ -40,11 +40,33 @@ def score_matrix(lh, la, rho=0.0, maxg=MAXG):
         matrix /= total
     return matrix
 
+def _count_market(mass, ou_lines):
+    """Marginální počty gólů: očekávání, over/under, modus a rozdělení."""
+    keys = sorted(mass)
+    if not keys:
+        empty = {f"{line:.1f}": {"over": 0.0, "under": 1.0} for line in ou_lines}
+        return {"xg": 0.0, "ou": empty, "mode": [0, 1.0], "dist": [(0, 1.0)]}
+    total_p = sum(mass.values()) or 1.0
+    xg = sum(k * mass[k] for k in keys) / total_p
+
+    def over_at(need):
+        return sum(mass[k] for k in keys if k >= need) / total_p
+
+    ou = {}
+    for line in ou_lines:
+        over = over_at(int(line + 0.5))
+        ou[f"{line:.1f}"] = {"over": over, "under": 1.0 - over}
+    mode = max(keys, key=lambda k: (mass[k], -k))
+    dist = [(k, mass[k] / total_p) for k in keys if mass[k] / total_p >= 0.004]
+    return {"xg": xg, "ou": ou, "mode": [mode, mass[mode] / total_p], "dist": dist}
+
+
 def markets_from_matrix(matrix, base_h=0, base_a=0):
-    """1X2, over/under 1.5/2.5/3.5, BTTS a nejpravděpodobnější skóre. base_* přičte už vstřelené góly."""
+    """1X2, góly každého týmu, součet zápasu, BTTS a nejpravděpodobnější skóre. base_* přičte už vstřelené góly."""
     n = matrix.shape[0]
     home = draw = away = btts = 0.0
     overs = {1.5: 0.0, 2.5: 0.0, 3.5: 0.0}
+    home_c, away_c, tot_c = {}, {}, {}
     exact = []
     bh, ba = int(base_h or 0), int(base_a or 0)
     for i in range(n):
@@ -66,6 +88,9 @@ def markets_from_matrix(matrix, base_h=0, base_a=0):
                 overs[3.5] += p
             if H >= 1 and A >= 1:
                 btts += p
+            home_c[H] = home_c.get(H, 0.0) + p
+            away_c[A] = away_c.get(A, 0.0) + p
+            tot_c[total_goals] = tot_c.get(total_goals, 0.0) + p
             exact.append((f"{H}-{A}", p))
     total = home + draw + away
     if total <= 0:
@@ -74,6 +99,10 @@ def markets_from_matrix(matrix, base_h=0, base_a=0):
         home, draw, away = home / total, draw / total, away / total
     exact.sort(key=lambda item: -item[1])
     lines = {f"{line:.1f}": {"over": overs[line], "under": 1.0 - overs[line]} for line in (1.5, 2.5, 3.5)}
+    home_side = _count_market(home_c, (0.5, 1.5, 2.5))
+    away_side = _count_market(away_c, (0.5, 1.5, 2.5))
+    match_total = _count_market(tot_c, (1.5, 2.5, 3.5))
+    match_total["lines"] = lines
     return {
         "p": [home, draw, away],
         "over": overs[2.5],
@@ -81,6 +110,8 @@ def markets_from_matrix(matrix, base_h=0, base_a=0):
         "lines": lines,
         "btts": btts,
         "exact": exact[:5],
+        "teams": {"home": home_side, "away": away_side},
+        "total": match_total,
     }
 
 def markets(lh, la, rho=0.0, maxg=MAXG):

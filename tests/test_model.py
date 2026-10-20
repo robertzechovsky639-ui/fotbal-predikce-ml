@@ -174,9 +174,24 @@ def test_goal_lines_live_and_gate():
     need = dixon.live_markets(2, 0, 0.05, 0.05)
     assert need["lines"]["1.5"]["over"] > 0.99
     assert need["lines"]["2.5"]["over"] < 0.2
+    home = mk["teams"]["home"]
+    away = mk["teams"]["away"]
+    assert home["ou"]["0.5"]["over"] > home["ou"]["1.5"]["over"] > home["ou"]["2.5"]["over"]
+    assert away["ou"]["0.5"]["over"] + away["ou"]["0.5"]["under"] == pytest.approx(1)
+    assert home["mode"][0] == max(home["dist"], key=lambda item: item[1])[0]
+    assert mk["total"]["xg"] == pytest.approx(home["xg"] + away["xg"])
+    assert sum(p for _, p in mk["total"]["dist"]) > 0.95
+    assert [k for k, _ in mk["total"]["dist"]] == sorted(k for k, _ in mk["total"]["dist"])
+    assert abs(home["xg"] - 1.45) < 0.2
+    led = need["teams"]["home"]
+    assert led["ou"]["0.5"]["over"] > 0.99 and led["ou"]["1.5"]["over"] > 0.99
+    assert led["ou"]["2.5"]["over"] < 0.2 and led["mode"][0] >= 2
+    assert need["total"]["xg"] == pytest.approx(led["xg"] + need["teams"]["away"]["xg"])
     red = dixon.live_markets(0, 0, *dixon.remaining_lambdas(1.5, 1.2, 40, (1, 0), (0, 0), 1))
     plain = dixon.live_markets(0, 0, *dixon.remaining_lambdas(1.5, 1.2, 40, (0, 0), (0, 0), 1))
     assert red["lines"]["2.5"]["over"] != pytest.approx(plain["lines"]["2.5"]["over"], abs=1e-4)
+    assert red["teams"]["home"]["xg"] < plain["teams"]["home"]["xg"]
+    assert red["teams"]["away"]["xg"] > plain["teams"]["away"]["xg"]
     lh, la = 1.7, 0.9
     cal = dixon.calibrate(lh, la, 0.0, [0.25, 0.28, 0.47])
     scaled = goals.rescale_total(cal[0], cal[1], lh + la)

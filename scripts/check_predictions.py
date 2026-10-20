@@ -19,7 +19,20 @@ for match in data["matches"]:
         bad.append(match.get("id"))
     xg = match.get("xg") or match.get("lam")
     lines = ((match.get("ou") or {}).get("lines") or {})
-    if not xg or len(xg) != 2 or any(line not in lines for line in ("1.5", "2.5", "3.5")) or match.get("btts") is None:
+    sides = match.get("teams_goals") or {}
+    total_goals = match.get("total_goals") or {}
+
+    def side_ok(side):
+        ou = (side or {}).get("ou") or {}
+        return side and side.get("xg") is not None and side.get("mode") and all(k in ou for k in ("0.5", "1.5", "2.5"))
+
+    if (
+        not xg or len(xg) != 2
+        or any(line not in lines for line in ("1.5", "2.5", "3.5"))
+        or match.get("btts") is None
+        or not side_ok(sides.get("home")) or not side_ok(sides.get("away"))
+        or total_goals.get("xg") is None or not total_goals.get("dist") or not total_goals.get("mode")
+    ):
         missing_goals.append(match.get("id"))
 print("zápasů", len(data["matches"]), "bez predikce", len(missing), "součet mimo 1", len(bad), "bez gólů", len(missing_goals))
 if missing or bad or missing_goals:

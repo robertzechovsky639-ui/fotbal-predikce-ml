@@ -23,15 +23,24 @@ def test_public_goal_lines():
             "3.5": {"over": 0.24, "under": 0.76},
         }},
         "btts": 0.53, "exact": [("1-1", 0.12), ("1-0", 0.11)],
+        "teams_goals": {
+            "home": {"xg": 1.41, "ou": {"0.5": {"over": 0.76, "under": 0.24}, "1.5": {"over": 0.42, "under": 0.58}, "2.5": {"over": 0.18, "under": 0.82}}, "mode": [1, 0.35], "dist": [[0, 0.24], [1, 0.35], [2, 0.24]]},
+            "away": {"xg": 1.07, "ou": {"0.5": {"over": 0.66, "under": 0.34}, "1.5": {"over": 0.31, "under": 0.69}, "2.5": {"over": 0.11, "under": 0.89}}, "mode": [1, 0.36], "dist": [[0, 0.34], [1, 0.36]]},
+        },
+        "total_goals": {"xg": 2.48, "mode": [2, 0.23], "dist": [[1, 0.18], [2, 0.23], [3, 0.2]], "lines": {"1.5": {"over": 0.71, "under": 0.29}, "2.5": {"over": 0.49, "under": 0.51}, "3.5": {"over": 0.24, "under": 0.76}}},
         "pred_low": False, "pred_note": None, "elo": [1600, 1590], "n": [40, 40],
     }
     pub = ex.public_match(item, pred)
-    assert pub["xg"] == [1.42, 1.08]
+    assert pub["xg"] == [1.41, 1.07]
     assert pub["ou"]["line"] == 2.5
     assert pub["ou"]["over"] == 0.49
     assert pub["ou"]["lines"]["1.5"]["over"] == 0.71
     assert pub["ou"]["lines"]["3.5"]["under"] == 0.76
     assert pub["exact"][0] == ["1-1", 0.12]
+    assert pub["teams_goals"]["home"]["ou"]["0.5"]["over"] == 0.76
+    assert pub["teams_goals"]["away"]["mode"] == [1, 0.36]
+    assert pub["total_goals"]["dist"][1] == [2, 0.23]
+    assert pub["total_goals"]["lines"]["2.5"]["over"] == 0.49
 
 
 def test_sofa_payload_is_not_dropped():
