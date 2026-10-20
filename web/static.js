@@ -29,11 +29,22 @@ function indexM(m) {
   ST.byId[m.id] = m; ST.byPair[pairKey(m)] = m; m.day = m.status === 'live' ? 0 : dayOf(m.ts);
 }
 
+function classSig(m) {
+  return [m.region, m.country, m.segment, m.tier, m.country_name, (m.tags || []).join(',')].join('|');
+}
+function applyClass(m) {
+  if (!m || typeof Fotbal.classifyStored !== 'function') return false;
+  const before = classSig(m);
+  Object.assign(m, Fotbal.classifyStored(m));
+  if (!m.region) m.region = 'other';
+  if (!m.segment) m.segment = 'main';
+  return classSig(m) !== before;
+}
 function applyData(d) {
   const merged = Fotbal.mergeList({ generated: ST.generated, matches: ST.all }, d);
   if (!merged.changed) return false;
   ST.generated = merged.generated; ST.all = merged.matches; ST.byId = {}; ST.byPair = {};
-  for (const m of ST.all) { if (!m.pred) Fotbal.ensurePred(m, predCtx()); indexM(m); if (m.status === 'live') Fotbal.liveCalc(m); }
+  for (const m of ST.all) { applyClass(m); if (!m.pred) Fotbal.ensurePred(m, predCtx()); indexM(m); if (m.status === 'live') Fotbal.liveCalc(m); }
   return true;
 }
 const REFRESH_MS = 7 * 60 * 1000;
@@ -46,13 +57,14 @@ function scheduleRefresh() {
   }, REFRESH_MS);
 }
 async function loadStatic() {
-  const [rules, model, teams, data] = await Promise.all([
+  const [rules, comp, model, teams, data] = await Promise.all([
     fetch('names_rules.json').then(r => r.json()),
+    fetch('comp_rules.json').then(r => r.json()),
     fetch('data/model.json').then(r => r.json()).catch(() => null),
     fetch('data/teams.json').then(r => r.json()).catch(() => []),
     fetch('data/matches.json', { cache: 'no-cache' }).then(r => r.json()),
   ]);
-  ST.rules = rules; Fotbal.setRules(rules); ST.model = model; ST.teams = teams || [];
+  ST.rules = rules; Fotbal.setRules(rules); Fotbal.setComp(comp); ST.model = model; ST.teams = teams || [];
   try { ST.slugs = await fetch('espn_slugs.json').then(r => r.json()); } catch (e) { ST.slugs = []; }
   applyData(data);
   for (const m of ST.all) Fotbal.ensurePred(m, { teams: ST.teams, elo_params: model && model.elo_params });
@@ -125,22 +137,34 @@ function consider(m, upd, token) {
   m.day = m.status === 'live' ? 0 : dayOf(m.ts);
   return m.id;
 }
+const CLASS_KEYS = ['league', 'league_name', 'ut', 'ut_slug', 'country_raw', 'region', 'country', 'country_name', 'tier', 'segment', 'tags', 'cup', 'neutral'];
+function stampClass(m, partial) {
+  for (const k of CLASS_KEYS) {
+    if (partial[k] == null || partial[k] === '') continue;
+    m[k] = partial[k];
+  }
+}
 function upsert(partial, token) {
   if (!partial || !partial.teams) return null;
   let m = ST.byId[partial.id] || ST.byPair[pairKey(partial)];
   if (!m) {
     m = partial;
-    m.region = m.region || 'europe_lower';
+    applyClass(m);
     m.reds = m.reds || [0, 0];
     Fotbal.ensurePred(m, predCtx());
     ST.all.push(m); indexM(m);
     if (m.status === 'live') Fotbal.liveCalc(m);
     return m.id;
   }
+  const before = classSig(m);
+  stampClass(m, partial);
+  applyClass(m);
+  const moved = classSig(m) !== before;
+  if (moved) m._reclass = true;
   if (!m.ssid && partial.ssid) m.ssid = partial.ssid;
   const upd = Fotbal.alignUpdate(m, partial);
-  if (!upd) return null;
-  return consider(m, upd, token);
+  if (!upd) return moved ? m.id : null;
+  return consider(m, upd, token) || (moved ? m.id : null);
 }
 
 function ymd(offset) {
@@ -148,8 +172,6 @@ function ymd(offset) {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
   return p.replace(/-/g, '');
 }
-function women(name) { const s = (name || '').toLowerCase(); return /(^|\s)(w|women|woman|u17|u19|u20|u21|u23|youth)\b|\(w\)|femen|frauen/.test(s); }
-
 function slowNet() {
   const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
   const c = navigator.connection;
@@ -164,7 +186,7 @@ async function srcSofa(changed, token) {
   const d = await j('https://api.sofascore1.com/api/v1/sport/football/events/live');
   for (const ev of d.events || []) {
     const partial = Fotbal.parseSofaEvent(ev);
-    if (!partial || women(partial.homeName) || women(partial.awayName) || women(partial.league_name)) continue;
+    if (!partial) continue;
     const id = upsert(partial, token);
     if (id) changed.add(id);
   }
@@ -173,9 +195,18 @@ async function src365(changed, token) {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Prague', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date()).split('/');
   const stamp = parts[0] + '/' + parts[1] + '/' + parts[2];
   const d = await j('https://webws.365scores.com/web/games/allscores/?sports=1&startDate=' + stamp + '&endDate=' + stamp + '&timezoneName=Europe/Prague&userCountryId=1');
+  const countries = {};
+  for (const c of d.countries || []) if (c && c.id != null) countries[c.id] = c.name;
+  const comps = {};
+  for (const c of d.competitions || []) if (c && c.id != null) comps[c.id] = c;
+  Fotbal.set365Index(d.competitions, d.countries);
+  for (const m of ST.all) {
+    if (String(m.league || '').indexOf('s365.') !== 0) continue;
+    if (applyClass(m)) { m._reclass = true; changed.add(m.id); }
+  }
   for (const g of d.games || []) {
-    const partial = Fotbal.parse365(g);
-    if (!partial || women(partial.homeName) || women(partial.awayName) || women(partial.league_name)) continue;
+    const partial = Fotbal.parse365(g, { comps, countries });
+    if (!partial) continue;
     const id = upsert(partial, token);
     if (id) changed.add(id);
   }
@@ -194,8 +225,9 @@ async function srcEspn(changed, token) {
       ok++;
       for (const ev of d.events || []) {
         const partial = Fotbal.parseEspnEvent(ev);
-        if (!partial || women(partial.homeName) || women(partial.awayName)) continue;
+        if (!partial) continue;
         partial.league = slug;
+        Object.assign(partial, Fotbal.classify({ src: 'espn', slug, home: partial.homeName, away: partial.awayName }));
         const id = upsert(partial, token);
         if (id) changed.add(id);
       }

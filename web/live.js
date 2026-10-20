@@ -7,8 +7,22 @@
   'use strict';
   const REGION_BASE = { europe_top: 1680, europe_lower: 1500, czech: 1500, europe_cups: 1580, asia: 1500, south_america: 1560, international: 1500, other: 1480 };
   let RULES = { stop: [], city: {}, aliases: {}, countries: {} };
+  let COMP = null;
 
+  let S365_COUNTRY = {};
   function setRules(rules) { RULES = rules || RULES; }
+  function setComp(rules) { COMP = rules || {}; }
+  function set365Index(comps, countries) {
+    const names = {};
+    for (const c of countries || []) if (c && c.id != null && c.name) names[c.id] = c.name;
+    const next = {};
+    for (const c of comps || []) {
+      if (!c || c.id == null) continue;
+      const name = names[c.countryId];
+      if (name) next[c.id] = name;
+    }
+    S365_COUNTRY = next;
+  }
   function strip(value) {
     return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '');
   }
@@ -34,6 +48,151 @@
   }
   function clubId(name, country) {
     return 'club:' + (codeOf(country) || 'xx') + ':' + (canon(name) || 'unknown');
+  }
+  function compIds(key) {
+    const out = {};
+    for (const raw of ((COMP && COMP[key]) || [])) out[+raw] = true;
+    return out;
+  }
+  function compHas(key, value) {
+    if (value == null || value === '') return false;
+    return !!compIds(key)[+value];
+  }
+  function tagBlob(home, away, slug, tournamentSlug) {
+    return [home, away, slug, tournamentSlug].filter(Boolean).join(' ').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  function tagsOf(spec) {
+    const tags = [];
+    const blob = tagBlob(spec.home, spec.away, spec.slug, spec.tournament_slug);
+    const label = String(spec.label || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (/\b(women|woman|femen|feminin|frauen|ladies|damen|nwsl)\b|\(w\)/.test(blob) || compHas('women_s365', spec.competition_id) || compHas('women_sofa', spec.tournament_id)) tags.push('women');
+    const slug = String(spec.tournament_slug || '');
+    if (compHas('college_sofa', spec.tournament_id) || /(^|[-.])ncaa([.-]|$)/.test(slug) || String(spec.slug || '').indexOf('ncaa') >= 0 || /\bncaa\b/.test(label)) tags.push('college');
+    if (/\b(u1[0-9]|u2[0-3]|youth|junior)\b/.test(blob) || compHas('youth_s365', spec.competition_id) || compHas('youth_sofa', spec.tournament_id)) tags.push('youth');
+    if (/\b(ii|iii|iv|reserves|reserve|rezerva|rezervy)\b/.test(blob)) tags.push('reserve');
+    return tags;
+  }
+  function segmentOf(tags) {
+    for (const name of ['women', 'college', 'youth', 'reserve']) if (tags.indexOf(name) >= 0) return name;
+    return 'main';
+  }
+  function countryLabel(code, raw) {
+    const labels = (COMP && COMP.labels) || {};
+    if (code && labels[code]) return labels[code];
+    const continents = (COMP && COMP.continent) || {};
+    if (raw && String(raw).trim() && !continents[String(raw).trim().toLowerCase()]) return String(raw).trim();
+    return null;
+  }
+  function regionFromCode(code, tier, cup) {
+    if (!code) return 'other';
+    const top = (COMP && COMP.europe_top) || [];
+    const europe = (COMP && COMP.europe) || [];
+    const sa = (COMP && COMP.south_america) || [];
+    const asia = (COMP && COMP.asia) || [];
+    if (code === 'cze' && !cup) return 'czech';
+    if (top.indexOf(code) >= 0 && tier === 1 && !cup) return 'europe_top';
+    if (europe.indexOf(code) >= 0) return 'europe_lower';
+    if (sa.indexOf(code) >= 0) return 'south_america';
+    if (asia.indexOf(code) >= 0) return 'asia';
+    return 'other';
+  }
+  function espnTier(slug) {
+    const parts = String(slug || '').split('.');
+    if (parts.length === 2 && /^\d+$/.test(parts[1])) return +parts[1];
+    return null;
+  }
+  function espnCountry(slug) {
+    const prefix = String(slug || '').split('.')[0];
+    const europe = (COMP && COMP.europe) || [];
+    const sa = (COMP && COMP.south_america) || [];
+    const asia = (COMP && COMP.asia) || [];
+    if (europe.indexOf(prefix) >= 0 || sa.indexOf(prefix) >= 0 || asia.indexOf(prefix) >= 0) return prefix;
+    if (codeOf(prefix) === prefix) return prefix;
+    return null;
+  }
+  function intlEspn(slug) {
+    slug = String(slug || '');
+    const exact = (COMP && COMP.international_espn_exact) || [];
+    if (exact.indexOf(slug) >= 0) return true;
+    return ((COMP && COMP.international_espn) || []).some(prefix => slug.indexOf(prefix) === 0);
+  }
+  function continentOf(name) {
+    if (!name || !COMP) return null;
+    return (COMP.continent || {})[String(name).trim().toLowerCase()] || null;
+  }
+  function countryFromRaw(raw) {
+    if (!raw || continentOf(raw)) return null;
+    const direct = codeOf(raw);
+    if (direct) return direct;
+    const tokens = strip(raw).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
+    const qual = { amateur: 1, women: 1, woman: 1, youth: 1, reserve: 1, reserves: 1, university: 1, college: 1 };
+    const trimmed = tokens.filter(tok => !qual[tok]);
+    if (trimmed.length && trimmed.length < tokens.length) return codeOf(trimmed.join(' '));
+    return null;
+  }
+  function classify(spec) {
+    spec = spec || {};
+    const slug = spec.slug || '';
+    let country = spec.country_code || null;
+    const raw = spec.country_name || '';
+    if (!country && raw) country = countryFromRaw(raw);
+    const tags = tagsOf(spec);
+    let tier = null, cup = false, region = null;
+    const cups = new Set((COMP && COMP.cups_espn) || []);
+    if (spec.src === 'espn' || (slug && spec.competition_id == null && spec.tournament_id == null)) {
+      tier = espnTier(slug);
+      if (cups.has(slug)) { region = 'europe_cups'; cup = true; country = null; }
+      else if (intlEspn(slug)) { region = 'international'; country = null; }
+      else if (COMP && COMP.continental_espn && COMP.continental_espn[slug]) { region = COMP.continental_espn[slug]; cup = true; country = null; }
+      else { country = espnCountry(slug) || country; region = regionFromCode(country, tier, false); }
+    } else if (compHas('cups_s365', spec.competition_id) || compHas('cups_sofa', spec.tournament_id)) {
+      region = 'europe_cups'; cup = true; country = null;
+    } else if (COMP && COMP.continental_s365 && COMP.continental_s365[String(spec.competition_id)]) {
+      region = COMP.continental_s365[String(spec.competition_id)]; cup = true; country = null;
+    } else if (compHas('international_s365', spec.competition_id)) {
+      region = 'international'; country = null;
+    } else {
+      const continent = continentOf(raw);
+      if (continent) {
+        region = continent; country = null;
+        const low = String(raw).trim().toLowerCase();
+        cup = low === 'africa' || low === 'north america' || low === 'south america' || low === 'asia';
+      } else region = regionFromCode(country, tier, false);
+    }
+    if (!region) region = 'other';
+    return {
+      region, country, tier, tags, segment: segmentOf(tags), cup,
+      neutral: region === 'europe_cups' || region === 'international',
+      country_name: countryLabel(country, cup ? null : raw),
+    };
+  }
+  function classifyStored(match) {
+    const teams = (match && match.teams) || [];
+    const spec = {
+      home: (match && match.home_name) || (teams[0] && teams[0].name),
+      away: (match && match.away_name) || (teams[1] && teams[1].name),
+      tournament_id: match && match.ut,
+      tournament_slug: match && match.ut_slug,
+      country_code: match && match.country,
+      country_name: match && match.country_raw,
+      label: match && match.league_name,
+    };
+    const league = String((match && match.league) || '');
+    if (league.indexOf('s365.') === 0) {
+      spec.src = 's365';
+      const tail = league.slice(5);
+      spec.competition_id = /^\d+$/.test(tail) ? +tail : null;
+      const mapped = spec.competition_id != null ? S365_COUNTRY[spec.competition_id] : null;
+      if (mapped) spec.country_name = mapped;
+    } else if (league.indexOf('sofa.') === 0) spec.src = 'sofa';
+    else { spec.src = 'espn'; spec.slug = league; }
+    if (spec.country_name) spec.country_code = null;
+    return classify(spec);
+  }
+  function lowConfidence(m) {
+    if (!m) return false;
+    if (m.segment && m.segment !== 'main') return true;
+    return !!(m.tags && m.tags.length);
   }
 
   function pois(maxg, lam) {
@@ -309,6 +468,9 @@
   function parseSofaEvent(ev, nowSec) {
     const home = ev.homeTeam && ev.homeTeam.name, away = ev.awayTeam && ev.awayTeam.name;
     if (!home || !away) return null;
+    const tourn = ev.tournament || {};
+    const cat = tourn.category || {};
+    const ut = tourn.uniqueTournament || {};
     const type = (ev.status && ev.status.type) || '';
     const desc = String((ev.status && ev.status.description) || '').toLowerCase();
     let status = 'upcoming';
@@ -318,14 +480,19 @@
     else if (desc.includes('cancel')) status = 'cancelled';
     else if (desc.includes('abandon')) status = 'abandoned';
     const clock = sofaMinute(ev, nowSec);
-    return {
+    const row = {
       id: 'sofa:' + ev.id, src: 'sofascore', ssid: ev.id, ts: ev.startTimestamp,
       status, minute: status === 'live' || status === 'finished' ? clock.minute : null, period: clock.period,
       hg: sofaGoals(ev.homeScore), ag: sofaGoals(ev.awayScore),
       hg90: sofaRegulation(ev.homeScore), ag90: sofaRegulation(ev.awayScore),
       homeName: home, awayName: away, teams: [{ name: home }, { name: away }],
-      league_name: (ev.tournament && ev.tournament.name) || '',
+      league_name: tourn.name || '',
+      league: tourn.id != null ? 'sofa.' + tourn.id : undefined,
+      ut: ut.id, ut_slug: ut.slug, country_raw: cat.name,
     };
+    return Object.assign(row, classify({
+      src: 'sofa', tournament_id: ut.id, tournament_slug: ut.slug, country_name: cat.name, home, away, label: tourn.name || '',
+    }));
   }
   function parseSofaIncidents(payload) {
     const reds = [0, 0];
@@ -364,7 +531,7 @@
     if (g.statusGroup === 4 || low.includes('ended') || low.includes('final') || low.includes('penalt')) return 'finished';
     return 'upcoming';
   }
-  function parse365(g) {
+  function parse365(g, ctx) {
     let home = g.homeCompetitor || {}, away = g.awayCompetitor || {};
     if (g.isHomeAwayInverted) { const s = home; home = away; away = s; }
     if (!home.name || !away.name) return null;
@@ -379,12 +546,20 @@
     else if (low.includes('extra')) period = 3;
     else if (low.includes('2nd') || (+g.gameTime > 45 && status === 'live')) period = 2;
     const minute = status === 'live' && g.gameTime != null && +g.gameTime >= 0 ? Math.round(+g.gameTime) : null;
-    return {
+    const comp = (ctx && ctx.comps && ctx.comps[g.competitionId]) || {};
+    const raw = ctx && ctx.countries ? (ctx.countries[comp.countryId] || '') : '';
+    const row = {
       id: 's365:' + g.id, src: 's365', ts: Math.floor(Date.parse(g.startTime) / 1000),
       status, minute, period, hg: goals(home), ag: goals(away),
       homeName: home.name, awayName: away.name, teams: [{ name: home.name }, { name: away.name }],
       league_name: g.competitionDisplayName || '',
+      league: g.competitionId != null ? 's365.' + g.competitionId : undefined,
+      country_raw: raw || undefined,
     };
+    return Object.assign(row, classify({
+      src: 's365', competition_id: g.competitionId, country_name: raw, home: home.name, away: away.name,
+      label: g.competitionDisplayName || '',
+    }));
   }
   function orient(m, homeName, awayName) {
     const h = canon(m.teams[0].name), a = canon(m.teams[1].name);
@@ -455,8 +630,11 @@
     if (ui.view !== 'zapasy') return false;
     const day = ui.day || 0;
     if (!(m.day === day || (day === 0 && m.status === 'live'))) return false;
+    const special = lowConfidence(m);
+    if (ui.reg === 'special') { if (!special) return false; }
+    else if (special) return false;
     if (ui.reg === 'focus' && m.region !== 'europe_top' && m.region !== 'czech' && m.region !== 'europe_cups') return false;
-    if (ui.reg && ui.reg !== 'all' && ui.reg !== 'focus' && m.region !== ui.reg) return false;
+    if (ui.reg && ui.reg !== 'all' && ui.reg !== 'focus' && ui.reg !== 'special' && m.region !== ui.reg) return false;
     if (ui.filt === 'live' && m.status !== 'live') return false;
     if (ui.filt === 'up' && m.status !== 'upcoming') return false;
     if (ui.filt === 'fin' && m.status !== 'finished') return false;
@@ -554,7 +732,8 @@
   }
 
   return {
-    setRules, canon, codeOf, clubId, scoreMatrix, markets, liveMarkets, remaining, eloLambdas,
+    setRules, setComp, set365Index, canon, codeOf, clubId, classify, classifyStored, lowConfidence,
+    scoreMatrix, markets, liveMarkets, remaining, eloLambdas,
     goalView, goalText,
     applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf, listVisible, mergeList, sofaGoals, sofaRegulation,
     parseEspnEvent, parseSofaEvent, parseSofaIncidents, parseSofaOdds, parse365, orient, alignUpdate, espnMinute, sofaMinute,
