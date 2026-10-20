@@ -18,7 +18,11 @@ def test_sofa_payload_is_not_dropped():
     }, "live", now=now)
     assert (minute, period) == (47, 2)
     assert ex.sofa_goals({"current": 1, "normaltime": 0}, "live") == 1
-    assert ex.sofa_goals({"current": 2, "normaltime": 1}, "finished") == 1
+    assert ex.sofa_goals({"current": 2, "normaltime": 1}, "finished") == 2
+    assert ex.sofa_regulation({"current": 2, "normaltime": 1}, "finished") == 1
+    text = (ROOT / "web" / "sw.js").read_text(encoding="utf-8")
+    assert ex.git_sha()
+    assert "fotbal-abc123def456" in text.replace("__GIT_SHA__", "abc123def456")
 
 
 def test_365_inverted_home_is_swapped():

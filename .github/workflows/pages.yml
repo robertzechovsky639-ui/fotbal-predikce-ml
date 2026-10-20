@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
 permissions:
-  contents: read
+  contents: write
   actions: write
   pages: write
   id-token: write
@@ -22,30 +22,20 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.13", cache: pip }
       - run: pip install -r requirements.txt
-      - name: Obnovit poslední state.json
-        uses: actions/cache/restore@v4
-        with:
-          path: data/online-cache
-          key: model-last-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            model-last-
-      - name: Model z release, jinak záloha z repa
+      - name: Model z release, state.json ze stejného release
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          if [ -f data/online-cache/state.json ]; then mkdir -p data/online && cp data/online-cache/state.json data/online/state.json; fi
-          python scripts/fetch_release.py
+        run: python scripts/fetch_release.py
       - run: python scripts/export_static.py
       - run: python scripts/check_predictions.py dist/data/matches.json
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
-      - name: Uložit zálohu state.json
-        id: save_cache
+      - name: state.json do release (přepíše jen ten asset)
         if: success()
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: data/online-cache
-          key: model-last-${{ github.run_id }}-${{ github.run_attempt }}
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          test -f data/online-cache/state.json
+          gh release view model -R "${{ github.repository }}" >/dev/null 2>&1 || gh release create model -R "${{ github.repository }}" --title model --notes "fotbal model"
+          gh release upload model data/online-cache/state.json --clobber -R "${{ github.repository }}"
   deploy:
     needs: build
     runs-on: ubuntu-latest

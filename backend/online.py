@@ -19,8 +19,6 @@ def should_apply(match, trained_through, recent_keys):
         return False
     if match.get("hg") is None or match.get("ag") is None:
         return False
-    if status in {"postponed", "abandoned", "cancelled", "canceled"}:
-        return False
     if not trained_through:
         return True
     date = parse_date(match["date"])

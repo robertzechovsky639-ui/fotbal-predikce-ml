@@ -61,18 +61,86 @@ def nat_id(name):
     key = nat_key(name) or "unknown"
     return f"nat:{key}"
 
+def _club_parts(tid):
+    parts = str(tid).split(":", 2)
+    if len(parts) != 3 or parts[0] != "club":
+        return None, None
+    return parts[1], canon(parts[2])
+
+
+def _matching_ids(teams, key, code):
+    hits = []
+    for tid in teams:
+        country, canon_key = _club_parts(tid)
+        if canon_key != key:
+            continue
+        if code and country != code:
+            continue
+        hits.append(tid)
+    hits.sort(key=lambda tid: ((teams[tid] or {}).get("n") or 0, tid), reverse=True)
+    return hits
+
+
 def resolve_club(teams, name, country=None):
-    """Najde id. Země z ligy má přednost; jinak jednoznačný klíč, jinak tým s nejvíc zápasy."""
+    """Najde id. Stejný canon v jedné zemi se sejde na tým s nejvíc zápasy."""
     key = canon(name)
     if not key:
         return "club:xx:unknown"
     code = code_of(country) if country else None
+    hits = _matching_ids(teams, key, code)
+    if hits:
+        return hits[0]
     if code:
-        return f"club:{code}:{key}"
-    hits = [tid for tid in teams if tid.startswith("club:") and tid.endswith(":" + key)]
-    if len(hits) == 1:
-        return hits[0]
-    if len(hits) > 1:
-        hits.sort(key=lambda tid: teams[tid].get("n", 0), reverse=True)
-        return hits[0]
-    return f"club:xx:{key}"
+        hits = _matching_ids(teams, key, None)
+        if hits:
+            return hits[0]
+    return f"club:{code or 'xx'}:{key}"
+
+
+def merge_clubs(state):
+    """Spojí záznamy, které po novém canonu znamenají stejný klub. Nechá id s nejvyšším n."""
+    teams = state.get("teams") or {}
+    groups = {}
+    for tid in list(teams):
+        code, key = _club_parts(tid)
+        if not code:
+            continue
+        groups.setdefault((code, key), []).append(tid)
+    alias = {}
+    for ids in groups.values():
+        if len(ids) < 2:
+            continue
+        ids.sort(key=lambda tid: ((teams[tid].get("n") or 0), tid), reverse=True)
+        keep, *rest = ids
+        dest = teams[keep]
+        for other in rest:
+            src = teams.pop(other)
+            alias[other] = keep
+            n1 = dest.get("n") or 0
+            n2 = src.get("n") or 0
+            total = n1 + n2
+            if total:
+                dest["elo"] = (float(dest.get("elo") or 1500) * n1 + float(src.get("elo") or 1500) * n2) / total
+            dest["n"] = total
+            if (src.get("last") or "") > (dest.get("last") or ""):
+                dest["last"] = src.get("last")
+                dest["name"] = src.get("name") or dest.get("name")
+                for field in ("gf", "ga", "xg", "xga", "sot", "sota", "hgf", "agf", "euro"):
+                    if src.get(field):
+                        dest[field] = src[field]
+    if alias and state.get("h2h"):
+        folded = {}
+        for key, rows in state["h2h"].items():
+            sides = [alias.get(part, part) for part in str(key).split("|")]
+            new_key = "|".join(sorted(sides))
+            bucket = folded.setdefault(new_key, [])
+            for row in rows:
+                row = list(row)
+                if len(row) > 1:
+                    row[1] = alias.get(row[1], row[1])
+                bucket.append(row)
+            if len(bucket) > 8:
+                del bucket[:-8]
+        state["h2h"] = folded
+    state["id_alias"] = alias
+    return state

@@ -77,7 +77,7 @@ Prohlížeč se ptá sám (CORS `*`):
 - 365scores allscores `sports=1`, časová zóna Europe/Prague
 - ESPN scoreboard po ligách, po pěti za tik
 
-Na počítači 1,5 s / 2,5 s / 4 s, začátky rozložené. Na telefonu 2,2 / 5 / 8 s. JSON se čte ve workeru. Při chybě se interval zdvojnásobí až na 30 s a na pozadí je nejméně 15 s. Selže-li jeden zdroj, další dva dál posouvají stejný zápas. Skóre, minuta, červené karty ani predikce se nevrací zpět, ani když odpověď dorazí pozdě. Karty se překreslí na místě.
+Celý Sofascore seznam (`events/live`) jde na počítači jednou za 20 s a na telefonu za 30 s. Skóre zápasů na obrazovce bere `/event/{id}`. 365scores 2,5 s / 5 s, ESPN 4 s / 8 s, začátky rozložené. JSON se čte ve workeru. `matches.json` se znovu stáhne každých 7 minut a nesmí přepsat živé skóre. Při chybě se interval zdvojnásobí až na 30 s a na pozadí je nejméně 15 s. Selže-li jeden zdroj, další dva dál posouvají stejný zápas. Skóre, minuta, červené karty ani predikce se nevrací zpět, ani když odpověď dorazí pozdě. Karty se překreslí na místě.
 
 1X2 je po 90 minutách. Prodloužení a penalty se do gólů predikce nepočítají (`normaltime` u Sofascore, perioda u ESPN). Odložený zápas nepřepíše živý. Naplánované skóre −1 u 365scores není 0:0.
 

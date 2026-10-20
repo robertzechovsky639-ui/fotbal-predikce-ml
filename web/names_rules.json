@@ -1,5 +1,5 @@
 {
-  "stop": ["fc","afc","cf","sc","ac","as","ss","ud","cd","fk","sk","sv","rc","rcd","osc","ogc","tsg","vfb","vfl","fsv","bsc","kv","sfc","cfc","bk","ff","ik","calcio","futbol","football","the","club","de","clube"],
+  "stop": ["fc","afc","cf","sc","ac","as","ss","ud","cd","fk","sk","sv","rc","rcd","osc","ogc","tsg","vfb","vfl","fsv","bsc","kv","sfc","cfc","bk","ff","ik","calcio","futbol","football","the","club","de","clube","pec","aj","nec","le"],
   "city": {"prague":"praha","pilsen":"plzen","munich":"munchen","cologne":"koln","nuremberg":"nurnberg","vienna":"wien","lisbon":"lisboa","rome":"roma","naples":"napoli","genoa":"genova","turin":"torino","seville":"sevilla","moscow":"moskva","kiev":"kyiv"},
   "aliases": {
     "man united":"manchester united","man utd":"manchester united","manchester utd":"manchester united",

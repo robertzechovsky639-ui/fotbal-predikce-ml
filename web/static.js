@@ -2,7 +2,7 @@
 const STATIC = true;
 const ST = { all: [], byId: {}, byPair: {}, teams: [], model: null, rules: null, generated: 0, slugs: [] };
 const SOURCES = {
-  sofascore: { fn: srcSofa, base: 1500, iv: 1500, lat: [] },
+  sofascore: { fn: srcSofa, base: 20000, iv: 20000, lat: [] },
   s365: { fn: src365, base: 2500, iv: 2500, lat: [] },
   espn: { fn: srcEspn, base: 4000, iv: 4000, lat: [] },
 };
@@ -24,11 +24,26 @@ function pairKey(m) {
   const x = a < b ? a : b, y = a < b ? b : a;
   return pragueDate(m.ts) + '|' + x + '|' + y;
 }
-function indexM(m) { ST.byId[m.id] = m; ST.byPair[pairKey(m)] = m; m.day = m.status === 'live' ? 0 : dayOf(m.ts); }
+function indexM(m) {
+  if (!m.ssid && typeof m.id === 'string' && m.id.indexOf('sofa:') === 0) m.ssid = m.id.slice(5);
+  ST.byId[m.id] = m; ST.byPair[pairKey(m)] = m; m.day = m.status === 'live' ? 0 : dayOf(m.ts);
+}
 
 function applyData(d) {
-  ST.generated = d.generated; ST.all = d.matches || []; ST.byId = {}; ST.byPair = {};
-  for (const m of ST.all) { if (!m.pred) Fotbal.ensurePred(m, { teams: ST.teams, elo_params: ST.model && ST.model.elo_params }); indexM(m); if (m.status === 'live') Fotbal.liveCalc(m); }
+  const merged = Fotbal.mergeList({ generated: ST.generated, matches: ST.all }, d);
+  if (!merged.changed) return false;
+  ST.generated = merged.generated; ST.all = merged.matches; ST.byId = {}; ST.byPair = {};
+  for (const m of ST.all) { if (!m.pred) Fotbal.ensurePred(m, predCtx()); indexM(m); if (m.status === 'live') Fotbal.liveCalc(m); }
+  return true;
+}
+const REFRESH_MS = 7 * 60 * 1000;
+function scheduleRefresh() {
+  setInterval(() => {
+    fetch('data/matches.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
+      if (applyData(d) && typeof render === 'function') render();
+      if (typeof upd === 'function') upd();
+    }).catch(() => {});
+  }, REFRESH_MS);
 }
 async function loadStatic() {
   const [rules, model, teams, data] = await Promise.all([
@@ -41,6 +56,7 @@ async function loadStatic() {
   try { ST.slugs = await fetch('espn_slugs.json').then(r => r.json()); } catch (e) { ST.slugs = []; }
   applyData(data);
   for (const m of ST.all) Fotbal.ensurePred(m, { teams: ST.teams, elo_params: model && model.elo_params });
+  scheduleRefresh();
 }
 function fileId(id) { return String(id).replace(/[^A-Za-z0-9._-]+/g, '_'); }
 async function staticApi(u) {
@@ -136,8 +152,8 @@ function slowNet() {
 }
 function pollPlan() {
   return slowNet()
-    ? { sofascore: 2200, s365: 5000, espn: 8000, detail: 1800, lag: { sofascore: 0, s365: 700, espn: 1400 } }
-    : { sofascore: 1500, s365: 2500, espn: 4000, detail: 1100, lag: { sofascore: 0, s365: 400, espn: 800 } };
+    ? { sofascore: 30000, s365: 5000, espn: 8000, detail: 1800, lag: { sofascore: 0, s365: 700, espn: 1400 } }
+    : { sofascore: 20000, s365: 2500, espn: 4000, detail: 1100, lag: { sofascore: 0, s365: 400, espn: 800 } };
 }
 async function srcSofa(changed, token) {
   const d = await j('https://api.sofascore1.com/api/v1/sport/football/events/live');
