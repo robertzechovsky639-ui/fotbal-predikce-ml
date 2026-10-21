@@ -45,6 +45,7 @@ function applyClass(m) {
 function applyData(d) {
   const merged = Fotbal.mergeList({ generated: ST.generated, matches: ST.all }, d);
   if (!merged.changed) return false;
+  for (const m of merged.matches || []) applyClass(m);
   ST.generated = merged.generated; ST.all = Fotbal.dedupeMatches(merged.matches); ST.byId = {}; ST.byPair = {};
   for (const m of ST.all) { applyClass(m); if (!m.pred) Fotbal.ensurePred(m, predCtx()); indexM(m); if (m.status === 'live') Fotbal.liveCalc(m); }
   return true;
@@ -146,17 +147,30 @@ function stampClass(m, partial) {
     m[k] = partial[k];
   }
 }
+function findLoose(partial) {
+  const keyed = ST.byPair[pairKey(partial)];
+  if (keyed && Fotbal.sameFixture(keyed, partial)) return keyed;
+  for (let i = 0; i < ST.all.length; i++) {
+    if (Fotbal.sameFixture(ST.all[i], partial)) return ST.all[i];
+  }
+  return null;
+}
 function upsert(partial, token) {
   if (!partial || !partial.teams) return null;
-  let m = ST.byId[partial.id] || ST.byPair[pairKey(partial)];
+  applyClass(partial);
+  let m = ST.byId[partial.id] || findLoose(partial);
   if (!m) {
     m = partial;
-    applyClass(m);
     m.reds = m.reds || [0, 0];
     Fotbal.ensurePred(m, predCtx());
     ST.all.push(m); indexM(m);
     if (m.status === 'live') Fotbal.liveCalc(m);
     return m.id;
+  }
+  if (partial.id && partial.id !== m.id) {
+    m._ids = m._ids ? m._ids.slice() : (m.id ? [m.id] : []);
+    if (m._ids.indexOf(partial.id) < 0) m._ids.push(partial.id);
+    ST.byId[partial.id] = m;
   }
   const before = classSig(m);
   stampClass(m, partial);

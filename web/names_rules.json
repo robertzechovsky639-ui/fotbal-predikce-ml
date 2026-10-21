@@ -78,8 +78,15 @@
     "kups kuopio":"kups","mjallby aif":"mjallby","kairat almaty":"kairat","jagiellonia bialystok":"jagiellonia",
     "hnk hajduk split":"hajduk split","omonia":"omonia nikosia","egnatia":"egnatia rrogozhine","kf egnatia":"egnatia rrogozhine",
     "olympique marseille":"marseille","gazovik orenburg":"orenburg","al diriyah":"diriyah",
-    "ittihad jeddah":"al ittihad","al shabab riyadh":"al shabab","atlas guadalajara":"atlas"
+    "ittihad jeddah":"al ittihad","al shabab riyadh":"al shabab","atlas guadalajara":"atlas",
+    "chivas":"guadalajara chivas","guadalajara":"guadalajara chivas",
+    "mk dons":"milton keynes dons",
+    "atletico mineiro":"atletico mg",
+    "u la calera":"union la calera",
+    "central cordoba santiago del estero":"central cordoba sde"
   },
+  "fixture_noise": ["youth","junior","reserves","reserve","rezerva","rezervy","ii","iii","iv","u17","u18","u19","u20","u21","u23","w"],
+  "fixture_generic": ["hapoel","maccabi","ironi","bnei","atletico","athletic","sporting","real","club","city","town","united","deportivo","deportes","fc","ac","cf","cd"],
   "nat_aliases": {
     "czech republic":"czechia","czech rep":"czechia","czechia":"czechia",
     "usa":"united states","united states":"united states","us":"united states",

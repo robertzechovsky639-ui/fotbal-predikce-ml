@@ -418,15 +418,48 @@ def fetch_sofa():
     return out
 
 
-def pair_key(item):
-    day = prague_day(item["ts"]).isoformat()
-    left, right = sorted((names.canon(item["home_name"]), names.canon(item["away_name"])))
-    return day + "|" + left + "|" + right
+KICKOFF_WINDOW = 2 * 3600
+_STATUS_RANK = {"upcoming": 0, "postponed": 1, "cancelled": 1, "live": 2, "finished": 3, "abandoned": 3}
 
 
-def orient_to(item, home_canon):
-    if names.canon(item["home_name"]) == home_canon:
-        return item
+def _fixture_tokens(name):
+    noise = set(names.RULES.get("fixture_noise") or [])
+    return [tok for tok in names.canon(name).split() if tok and tok not in noise]
+
+
+def _sides_close(left, right):
+    """Stejné tokeny, nebo kratší název je podmnožina a obsahuje nezaměnitelné slovo."""
+    if not left or not right:
+        return False
+    a, b = set(left), set(right)
+    if a == b:
+        return True
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    if not short.issubset(long):
+        return False
+    generic = set(names.RULES.get("fixture_generic") or [])
+    return any(len(tok) >= 4 and tok not in generic for tok in short)
+
+
+def fixture_rel(a, b):
+    """1 stejné strany, -1 prohozené, 0 jiný zápas. Liga se neshoduje, kickoff ano (±2 h)."""
+    if not a.get("home_name") or not a.get("away_name") or not b.get("home_name") or not b.get("away_name"):
+        return 0
+    if (a.get("segment") or "main") != (b.get("segment") or "main"):
+        return 0
+    ta, tb = a.get("ts"), b.get("ts")
+    if ta and tb and abs(int(ta) - int(tb)) > KICKOFF_WINDOW:
+        return 0
+    ha, aa = _fixture_tokens(a["home_name"]), _fixture_tokens(a["away_name"])
+    hb, ab = _fixture_tokens(b["home_name"]), _fixture_tokens(b["away_name"])
+    if _sides_close(ha, hb) and _sides_close(aa, ab):
+        return 1
+    if _sides_close(ha, ab) and _sides_close(aa, hb):
+        return -1
+    return 0
+
+
+def _flip(item):
     flipped = dict(item)
     flipped["home_name"], flipped["away_name"] = item["away_name"], item["home_name"]
     flipped["hg"], flipped["ag"] = item.get("ag"), item.get("hg")
@@ -439,48 +472,116 @@ def orient_to(item, home_canon):
     return flipped
 
 
-def better(a, b):
-    rank = {"upcoming": 0, "postponed": 0, "cancelled": 0, "live": 1, "finished": 2, "abandoned": 2}
-    if rank.get(b["status"], 0) > rank.get(a["status"], 0):
-        return b
-    if rank.get(a["status"], 0) > rank.get(b["status"], 0):
-        return a
-    # stejný stav: ESPN má stabilnější id
-    if a["src"] == "espn":
-        base = a
-        extra = b
-    elif b["src"] == "espn":
-        base = b
-        extra = a
-    else:
-        base, extra = a, b
-    if base.get("hg") is None and extra.get("hg") is not None:
-        base["hg"], base["ag"] = extra["hg"], extra["ag"]
-    if base.get("minute") is None and extra.get("minute") is not None:
-        base["minute"] = extra["minute"]
-    if extra.get("odds"):
-        base["odds"] = extra["odds"]
-    return base
+def _orient(item, rel):
+    return item if rel >= 0 else _flip(item)
+
+
+def _score_pair(item):
+    hg, ag = item.get("hg"), item.get("ag")
+    if hg is None or ag is None:
+        return None
+    try:
+        return int(hg), int(ag)
+    except (TypeError, ValueError):
+        return None
+
+
+def _minute(item):
+    minute = item.get("minute")
+    if minute is None:
+        return None
+    try:
+        return int(minute)
+    except (TypeError, ValueError):
+        return None
+
+
+def _behind(left, right):
+    if left is None or right is None:
+        return False
+    return left[0] <= right[0] and left[1] <= right[1] and left != right
+
+
+def _copy_clock(dst, src):
+    for key in ("hg", "ag", "hg90", "ag90", "status", "minute", "period", "ht"):
+        if key in src:
+            dst[key] = src[key]
+    if src.get("reds") is not None:
+        dst["reds"] = list(src["reds"])
+
+
+def _lift_minute(dst, src):
+    src_min, dst_min = _minute(src), _minute(dst)
+    if src_min is None:
+        return
+    if dst_min is None or src_min > dst_min:
+        dst["minute"] = src.get("minute")
+        if src.get("period") is not None:
+            dst["period"] = src.get("period")
+
+
+def overlay_fresher(keep, other):
+    """Na už srovnané strany položí pokročilejší skóre. Skóre se nemíchá."""
+    keep_score, other_score = _score_pair(keep), _score_pair(other)
+    if other_score is None:
+        _lift_minute(keep, other)
+        if keep_score is None and _STATUS_RANK.get(other.get("status"), 0) > _STATUS_RANK.get(keep.get("status"), 0):
+            keep["status"] = other.get("status")
+        return keep
+    if keep_score is None or _behind(keep_score, other_score):
+        saved_min, saved_period = keep.get("minute"), keep.get("period")
+        _copy_clock(keep, other)
+        if _minute({"minute": saved_min}) is not None and (
+            _minute(other) is None or _minute({"minute": saved_min}) > _minute(other)
+        ):
+            keep["minute"] = saved_min
+            keep["period"] = saved_period
+        return keep
+    if _behind(other_score, keep_score):
+        _lift_minute(keep, other)
+        return keep
+    keep_rank = _STATUS_RANK.get(keep.get("status"), 0)
+    other_rank = _STATUS_RANK.get(other.get("status"), 0)
+    keep_min, other_min = _minute(keep), _minute(other)
+    if keep_score == other_score and other_min is None and keep_min is not None and other_rank > keep_rank:
+        return keep
+    other_clock = other_min is not None and (keep_min is None or other_min > keep_min)
+    if other_rank > keep_rank or other_clock:
+        _copy_clock(keep, other)
+    return keep
 
 
 def merge(rows):
-    bag = {}
+    kept = []
     for item in rows:
         if not item.get("ts") or not item.get("home_name"):
             continue
-        key = pair_key(item)
-        if key not in bag:
-            bag[key] = item
+        hit = None
+        for i, base in enumerate(kept):
+            rel = fixture_rel(item, base)
+            if rel:
+                hit = (i, rel)
+                break
+        if hit is None:
+            kept.append(item)
             continue
-        base = bag[key]
-        # ESPN home/away je autoritativní; otočený zdroj nesmí prohodit skóre.
-        if item["src"] == "espn" and base["src"] != "espn":
-            base = orient_to(base, names.canon(item["home_name"]))
-            bag[key] = better(item, base)
+        i, rel = hit
+        base = kept[i]
+        # ESPN home/away a id jsou autoritativní; skóre bere čerstvější zdroj.
+        if item.get("src") == "espn" and base.get("src") != "espn":
+            aligned = _orient(base, rel)
+            row = dict(item)
+            overlay_fresher(row, aligned)
+            if aligned.get("odds"):
+                row["odds"] = aligned["odds"]
+            kept[i] = row
         else:
-            item = orient_to(item, names.canon(base["home_name"]))
-            bag[key] = better(base, item)
-    return list(bag.values())
+            aligned = _orient(item, rel)
+            overlay_fresher(base, aligned)
+            if aligned.get("odds"):
+                base["odds"] = aligned["odds"]
+            kept[i] = base
+    return kept
 
 
 def winner_of(item):

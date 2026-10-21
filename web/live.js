@@ -87,7 +87,8 @@
     const tags = [];
     const blob = tagBlob(spec.home, spec.away, spec.slug, spec.tournament_slug);
     const label = String(spec.label || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    if (/\b(women|woman|femen|feminin|frauen|ladies|damen|nwsl)\b|\(w\)/.test(blob) || compHas('women_s365', spec.competition_id) || compHas('women_sofa', spec.tournament_id)) tags.push('women');
+    const marked = blob + ' ' + label;
+    if (/\b(women|woman|femen|feminin|frauen|ladies|damen|nwsl)\b|\(w\)/.test(marked) || compHas('women_s365', spec.competition_id) || compHas('women_sofa', spec.tournament_id)) tags.push('women');
     const slug = String(spec.tournament_slug || '');
     if (compHas('college_sofa', spec.tournament_id) || /(^|[-.])ncaa([.-]|$)/.test(slug) || String(spec.slug || '').indexOf('ncaa') >= 0 || /\bncaa\b/.test(label)) tags.push('college');
     if (/\b(u1[0-9]|u2[0-3]|youth|junior)\b/.test(blob) || compHas('youth_s365', spec.competition_id) || compHas('youth_sofa', spec.tournament_id)) tags.push('youth');
@@ -611,18 +612,39 @@
     if (h === A && a === H) return -1;
     return 0;
   }
-  function namesClose(a, b) {
-    if (a === b) return true;
-    if (!a || !b) return false;
-    return a.indexOf(b + ' ') === 0 || b.indexOf(a + ' ') === 0;
+  const KICKOFF_WINDOW = 2 * 3600;
+  function fixtureTokens(name) {
+    const noise = {};
+    for (const tok of (RULES.fixture_noise || [])) noise[tok] = 1;
+    const out = [];
+    for (const tok of canon(name).split(' ')) if (tok && !noise[tok]) out.push(tok);
+    return out;
+  }
+  function sidesClose(left, right) {
+    if (!left.length || !right.length) return false;
+    const a = {}, b = {};
+    for (const tok of left) a[tok] = 1;
+    for (const tok of right) b[tok] = 1;
+    const ka = Object.keys(a), kb = Object.keys(b);
+    let equal = ka.length === kb.length;
+    if (equal) for (const tok of ka) if (!b[tok]) equal = false;
+    if (equal) return true;
+    const short = ka.length <= kb.length ? a : b;
+    const long = ka.length <= kb.length ? b : a;
+    const ks = Object.keys(short);
+    for (const tok of ks) if (!long[tok]) return false;
+    const generic = {};
+    for (const tok of (RULES.fixture_generic || [])) generic[tok] = 1;
+    for (const tok of ks) if (tok.length >= 4 && !generic[tok]) return true;
+    return false;
   }
   function looseOrient(m, homeName, awayName) {
     const exact = orient(m, homeName, awayName);
     if (exact) return exact;
-    const h = canon(m.teams[0].name), a = canon(m.teams[1].name);
-    const H = canon(homeName), A = canon(awayName);
-    if (namesClose(h, H) && namesClose(a, A)) return 1;
-    if (namesClose(h, A) && namesClose(a, H)) return -1;
+    const h = fixtureTokens(m.teams[0].name), a = fixtureTokens(m.teams[1].name);
+    const H = fixtureTokens(homeName), A = fixtureTokens(awayName);
+    if (sidesClose(h, H) && sidesClose(a, A)) return 1;
+    if (sidesClose(h, A) && sidesClose(a, H)) return -1;
     return 0;
   }
   function clockText(m) {
@@ -642,10 +664,70 @@
   }
   function sameFixture(a, b) {
     if (!a || !b || !a.teams || !b.teams) return 0;
+    if ((a.segment || 'main') !== (b.segment || 'main')) return 0;
     const rel = looseOrient(a, b.teams[0].name, b.teams[1].name);
     if (!rel) return 0;
-    if (a.ts && b.ts && Math.abs(+a.ts - +b.ts) > 36 * 3600) return 0;
+    if (a.ts && b.ts && Math.abs(+a.ts - +b.ts) > KICKOFF_WINDOW) return 0;
     return rel;
+  }
+  function scorePair(m) {
+    if (!m || m.hg == null || m.ag == null) return null;
+    return [+m.hg, +m.ag];
+  }
+  function minuteOf(m) {
+    if (!m || m.minute == null || m.minute === '') return null;
+    return +m.minute;
+  }
+  function scoreBehind(left, right) {
+    if (!left || !right) return false;
+    return left[0] <= right[0] && left[1] <= right[1] && (left[0] < right[0] || left[1] < right[1]);
+  }
+  function copyClock(dst, src) {
+    dst.hg = src.hg; dst.ag = src.ag;
+    dst.status = src.status; dst.minute = src.minute; dst.period = src.period; dst.ht = src.ht;
+    if (src.reds) dst.reds = src.reds.slice();
+  }
+  function liftMinute(dst, src) {
+    const sm = minuteOf(src), dm = minuteOf(dst);
+    if (sm == null) return;
+    if (dm == null || sm > dm) {
+      dst.minute = src.minute;
+      if (src.period != null) dst.period = src.period;
+    }
+  }
+  function overlayFresher(keep, other) {
+    const ks = scorePair(keep), os = scorePair(other);
+    const rank = { upcoming: 0, postponed: 1, cancelled: 1, live: 2, finished: 3, abandoned: 3 };
+    if (!os) {
+      liftMinute(keep, other);
+      if (!ks && (rank[other.status] || 0) > (rank[keep.status] || 0)) keep.status = other.status;
+      return;
+    }
+    if (!ks || scoreBehind(ks, os)) {
+      const savedMin = keep.minute, savedPeriod = keep.period;
+      copyClock(keep, other);
+      const saved = minuteOf({ minute: savedMin });
+      if (saved != null && (minuteOf(other) == null || saved > minuteOf(other))) {
+        keep.minute = savedMin;
+        keep.period = savedPeriod;
+      }
+      return;
+    }
+    if (scoreBehind(os, ks)) { liftMinute(keep, other); return; }
+    const kr = rank[keep.status] || 0, orr = rank[other.status] || 0;
+    const km = minuteOf(keep), om = minuteOf(other);
+    if (ks[0] === os[0] && ks[1] === os[1] && om == null && km != null && orr > kr) return;
+    const otherClock = om != null && (km == null || om > km);
+    if (orr > kr || otherClock) copyClock(keep, other);
+  }
+  function orientedScore(m, rel) {
+    if (rel > 0) return {
+      hg: m.hg, ag: m.ag, status: m.status, minute: m.minute, period: m.period, ht: m.ht, reds: m.reds,
+    };
+    return {
+      hg: m.ag, ag: m.hg, status: m.status, minute: m.minute, period: m.period, ht: m.ht,
+      reds: m.reds && m.reds.length === 2 ? [m.reds[1], m.reds[0]] : m.reds,
+    };
   }
   function richness(m) {
     let s = 0;
@@ -661,12 +743,15 @@
   }
   function foldMatch(keep, other) {
     if (!keep || !other || !keep.teams || !other.teams) return false;
+    if ((keep.segment || 'main') !== (other.segment || 'main')) return false;
+    if (keep.ts && other.ts && Math.abs(+keep.ts - +other.ts) > KICKOFF_WINDOW) return false;
     const rel = looseOrient(keep, other.teams[0].name, other.teams[1].name);
     if (!rel) return false;
     const ids = keep._ids ? keep._ids.slice() : (keep.id ? [keep.id] : []);
     const extra = [other.id].concat(other._ids || []);
     for (let i = 0; i < extra.length; i++) if (extra[i] && ids.indexOf(extra[i]) < 0) ids.push(extra[i]);
     if (ids.length) keep._ids = ids;
+    overlayFresher(keep, orientedScore(other, rel));
     if (rel < 0) return true;
     if ((!keep.pred || keep.pred_low) && other.pred && other.pred.h != null && !other.pred_low) {
       keep.pred = other.pred;
@@ -703,7 +788,7 @@
     return out;
   }
   function alignUpdate(m, partial) {
-    const rel = orient(m, partial.homeName || partial.teams[0].name, partial.awayName || partial.teams[1].name);
+    const rel = looseOrient(m, partial.homeName || partial.teams[0].name, partial.awayName || partial.teams[1].name);
     if (!rel) return null;
     const upd = { status: partial.status, minute: partial.minute, period: partial.period, winner: partial.winner, ht: partial.ht };
     if (rel > 0) { upd.hg = partial.hg; upd.ag = partial.ag; if (partial.reds) upd.reds = partial.reds; }
