@@ -44,6 +44,7 @@ def test_canon_clubs():
     assert names.canon("M'gladbach") == "monchengladbach"
     assert names.canon("Ath Madrid") == "atletico madrid"
     assert names.canon("Ath Bilbao") == "athletic bilbao"
+    assert names.canon("Athletic Club") == "athletic bilbao"
     assert names.canon("Paris SG") == "paris saint germain"
     assert names.canon("Bayern Munich") == "bayern munchen"
     assert names.canon("Espanol") == "espanyol"
@@ -54,6 +55,38 @@ def test_canon_clubs():
     assert names.canon("Sparta Prague") == "sparta praha"
     assert names.canon("Sparta Rotterdam") != names.canon("Sparta Prague")
     assert names.club_id("Arsenal", "ENG") != names.club_id("Arsenal", "ARG")
+    assert names.canon("N.E.C. Nijmegen") == "nijmegen"
+    assert names.canon("F.C. København") == "copenhagen"
+    assert names.canon("Union St.-Gilloise") == "st gilloise"
+    assert names.canon("Peterborough United") == "peterboro"
+    assert names.canon("Bristol Rovers") == "bristol rvs"
+    teams = {
+        "club:eng:manchester united": {"n": 1373, "elo": 1800},
+        "club:eng:manchester city": {"n": 1454, "elo": 1850},
+        "club:eng:mansfield": {"n": 1507, "elo": 1500},
+        "club:eng:bradford": {"n": 1503, "elo": 1490},
+        "club:eng:peterboro": {"n": 1517, "elo": 1480},
+        "club:den:copenhagen": {"n": 481, "elo": 1600},
+        "club:ned:nijmegen": {"n": 929, "elo": 1550},
+        "club:esp:bradford": {"n": 40, "elo": 1400},
+    }
+    assert names.resolve_club(teams, "Manchester United", "England") == "club:eng:manchester united"
+    assert names.resolve_club(teams, "Manchester City", "England") == "club:eng:manchester city"
+    assert names.resolve_club(teams, "Mansfield Town", "England") == "club:eng:mansfield"
+    assert names.resolve_club(teams, "Bradford City", "England") == "club:eng:bradford"
+    assert names.resolve_club(teams, "Peterborough United", "England") == "club:eng:peterboro"
+    assert names.resolve_club(teams, "F.C. København", "Denmark") == "club:den:copenhagen"
+    assert names.resolve_club(teams, "N.E.C. Nijmegen", "Netherlands") == "club:ned:nijmegen"
+    assert names.resolve_club(teams, "Sporting CP", None) == "club:xx:sporting cp"
+    mexican = {
+        "club:bra:santos": {"n": 839, "elo": 1700},
+        "club:mex:santos laguna": {"n": 877, "elo": 1600},
+        "club:ned:zwolle": {"n": 511, "elo": 1550},
+    }
+    assert names.resolve_club(mexican, "Santos", "Mexico") == "club:mex:santos laguna"
+    assert names.resolve_club(mexican, "Santos Laguna", "Mexico") == "club:mex:santos laguna"
+    assert names.resolve_club(mexican, "Santos", "Brazil") == "club:bra:santos"
+    assert names.resolve_club(mexican, "Zwolle", "Belgium") == "club:ned:zwolle"
 
 
 def test_odds_ignore_closing():
@@ -122,6 +155,10 @@ def test_k_factor_and_matrix():
     assert moved["p"][1] != pytest.approx(base["p"][1], abs=1e-4)
     rem0 = dixon.remaining_lambdas(1.5, 1.2, 0, (0, 0), (0, 0), 1)
     late = dixon.remaining_lambdas(1.5, 1.2, 80, (0, 0), (0, 0), 2)
+    et = dixon.remaining_lambdas(1.5, 1.2, 100, (0, 0), (0, 0), 3)
+    reg100 = dixon.remaining_lambdas(1.5, 1.2, 100, (0, 0), (0, 0), 2)
+    assert et[0] > reg100[0]
+    assert dixon.remaining_lambdas(1.5, 1.2, 120, (0, 0), (0, 0), 5)[0] == pytest.approx(1e-4)
     red = dixon.remaining_lambdas(1.5, 1.2, 30, (1, 0), (0, 0), 1)
     assert late[0] + late[1] > rem0[0] * 0  # jen že se spočítá
     assert red[0] < dixon.remaining_lambdas(1.5, 1.2, 30, (0, 0), (0, 0), 1)[0]
@@ -217,6 +254,9 @@ def test_workflows_keep_previous_model():
     pages = (root / ".github/workflows/pages.yml").read_text(encoding="utf-8")
     assert "concurrency:" in learn and "cancel-in-progress: false" in learn
     assert "concurrency:" in pages and "cancel-in-progress: false" in pages
+    assert "github.event_name == 'push'" in pages
+    assert "origin/main" in pages and "steps.gate.outputs.deploy" in pages
+    assert "needs.build.outputs.deploy == 'true'" in pages
     assert "fetch_release.py" in learn and "fetch_release.py" in pages
     assert "model-last-" not in pages
     assert "state.json" in pages and "--clobber" in pages

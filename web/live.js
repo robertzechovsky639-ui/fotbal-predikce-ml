@@ -24,14 +24,36 @@
     S365_COUNTRY = next;
   }
   function strip(value) {
-    return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '');
+    return String(value || '')
+      .replace(/[øØ]/g, 'o').replace(/æ/gi, 'ae').replace(/œ/gi, 'oe')
+      .replace(/[łŁ]/g, 'l').replace(/[đĐðÐ]/g, 'd').replace(/þ/gi, 'th').replace(/ß/g, 'ss')
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’]/g, '');
+  }
+  function collapseInitials(tokens) {
+    const out = [];
+    let buf = [];
+    const flush = () => {
+      if (buf.length >= 2) out.push(buf.join(''));
+      else if (buf.length === 1) out.push(buf[0]);
+      buf = [];
+    };
+    for (const token of tokens) {
+      if (token.length === 1 && /[a-z]/.test(token)) buf.push(token);
+      else { flush(); out.push(token); }
+    }
+    flush();
+    return out;
   }
   function canon(name) {
     const text = strip(name).replace(/[^a-z0-9]+/g, ' ');
-    const out = [];
+    const raw = [];
     for (const token of text.split(' ').filter(Boolean)) {
       if (/^\d+$/.test(token)) continue;
       if (/^(18|19|20)\d\d$/.test(token)) continue;
+      raw.push(token);
+    }
+    const out = [];
+    for (const token of collapseInitials(raw)) {
       if ((RULES.stop || []).indexOf(token) >= 0) continue;
       out.push((RULES.city || {})[token] || token);
     }
@@ -293,8 +315,11 @@
     minute = minute == null ? 0 : +minute;
     period = +period || 1;
     let frac, late = 1;
-    if (period > 2 || minute >= 120) frac = 0;
-    else {
+    if (period >= 5 || minute >= 120) frac = 0;
+    else if (period > 2) {
+      const m = Math.min(120, Math.max(minute, 90));
+      frac = (120 - m) / 90;
+    } else {
       const m = Math.min(Math.max(minute, 0), 99);
       const regular = Math.max(0, 90 - Math.min(m, 90));
       const extra = m > 90 ? Math.max(0, 96 - m) : 0;
@@ -333,19 +358,28 @@
   }
   function liveKey(m) {
     const r = m.reds || [0, 0];
-    return [m.status, m.hg, m.ag, m.minute, m.period, r[0], r[1], m.pred && m.pred.h].join('|');
+    return [m.status, m.hg, m.ag, m.minute, m.ht ? 1 : 0, m.period, r[0], r[1], m.pred && m.pred.h].join('|');
   }
   function applyLive(m, upd, token, fresh) {
     // Starší odpověď stejného zdroje smí stav jen posunout dopředu. Skóre, minuta ani predikce se nevrací.
     const stale = !!(fresh && token && !fresh(token));
+    const terminal = upd.status === 'finished' || upd.status === 'abandoned';
     if ((m.status === 'finished' || m.status === 'abandoned') && upd.status !== 'finished' && upd.status !== 'abandoned') return false;
     if (m.status === 'cancelled' && upd.status !== 'cancelled') return false;
     if (m.status === 'live' && (upd.status === 'upcoming' || upd.status === 'postponed')) return false;
     if (m.status === 'postponed' && upd.status === 'upcoming') return false;
     if (upd.status && rankStatus(upd.status) < rankStatus(m.status)) return false;
     const uh = upd.hg, ua = upd.ag;
-    if (upd.minute != null && m.minute != null && upd.minute < m.minute) return false;
-    if (upd.period != null && m.period != null && upd.period < m.period) return false;
+    let minute = upd.minute;
+    if (!terminal && minute != null && m.minute != null && minute < m.minute) {
+      if (upd.ht) minute = null;
+      else return false;
+    }
+    let period = upd.period;
+    if (!terminal && period != null && m.period != null && period < m.period) {
+      if (upd.ht) period = null;
+      else return false;
+    }
     if (upd.reds && m.reds && (upd.reds[0] < m.reds[0] || upd.reds[1] < m.reds[1])) return false;
     const drop = (m.hg != null && uh != null && uh < m.hg) || (m.ag != null && ua != null && ua < m.ag);
     if (drop) {
@@ -363,7 +397,7 @@
       m._var = null;
     }
     const scoreUp = (uh != null && (m.hg == null || uh > m.hg)) || (ua != null && (m.ag == null || ua > m.ag));
-    const minuteUp = upd.minute != null && (m.minute == null || upd.minute > m.minute);
+    const minuteUp = minute != null && (m.minute == null || minute > m.minute);
     const statusUp = upd.status && rankStatus(upd.status) > rankStatus(m.status);
     const redsUp = upd.reds && (upd.reds[0] > ((m.reds || [0, 0])[0]) || upd.reds[1] > ((m.reds || [0, 0])[1]));
     if (stale && !scoreUp && !minuteUp && !statusUp && !redsUp) return false;
@@ -371,8 +405,10 @@
     if (uh != null) m.hg = uh;
     if (ua != null) m.ag = ua;
     if (upd.status) m.status = upd.status;
-    if (upd.minute != null) m.minute = upd.minute;
-    if (upd.period != null) m.period = upd.period;
+    if (minute != null && (m.minute == null || minute >= m.minute)) m.minute = minute;
+    if (upd.ht === true || upd.ht === false) m.ht = upd.ht;
+    if (terminal) m.ht = false;
+    if (period != null && (m.period == null || period >= m.period)) m.period = period;
     if (upd.reds) m.reds = [upd.reds[0] || 0, upd.reds[1] || 0];
     if (upd.winner != null) m.winner = upd.winner;
     if (liveKey(m) === before) return false;
@@ -391,6 +427,7 @@
   function espnStatus(comp) {
     const st = (comp.status && comp.status.type) || {};
     const name = st.name || '';
+    if (name === 'STATUS_HALFTIME') return 'live';
     if (name === 'STATUS_POSTPONED') return 'postponed';
     if (name === 'STATUS_CANCELED' || name === 'STATUS_CANCELLED') return 'cancelled';
     if (name === 'STATUS_ABANDONED') return 'abandoned';
@@ -405,8 +442,12 @@
     for (const c of comp.competitors || []) sides[c.homeAway] = c;
     if (!sides.home || !sides.away) return null;
     const status = espnStatus(comp);
+    const typeName = ((comp.status && comp.status.type) || {}).name || '';
     const minute = espnMinute(comp.status && comp.status.displayClock);
-    const period = (comp.status && +comp.status.period) || (minute > 45 ? 2 : 1);
+    let period = (comp.status && +comp.status.period) || (minute > 45 ? 2 : 1);
+    if (typeName === 'STATUS_PENALTY_SHOOTOUT' || typeName === 'STATUS_SHOOTOUT') period = 5;
+    else if (typeName.indexOf('EXTRA') >= 0 && period < 3) period = 3;
+    const ht = typeName === 'STATUS_HALFTIME';
     const reds = [0, 0];
     let saw = false;
     for (const det of comp.details || []) {
@@ -426,7 +467,7 @@
     const home = sides.home.team.displayName, away = sides.away.team.displayName;
     return {
       id: 'espn:' + ev.id, src: 'espn', ts: Math.floor(Date.parse(ev.date) / 1000),
-      status, minute: status === 'upcoming' ? null : minute, period: period > 2 ? period : period,
+      status, minute: status === 'upcoming' || ht ? null : minute, period, ht,
       hg: goals(sides.home), ag: goals(sides.away), reds: saw ? reds : undefined,
       homeName: home, awayName: away, teams: [{ name: home }, { name: away }],
     };
@@ -449,7 +490,7 @@
     const st = ev.status || {};
     const desc = String(st.description || '').toLowerCase();
     const t = ev.time || {};
-    if (desc.includes('halftime') || desc === 'ht') return { minute: 45, period: 1 };
+    if (desc.includes('halftime') || desc === 'ht') return { minute: 45, period: 1, ht: true };
     let period = 1;
     if (desc.includes('2nd')) period = 2;
     else if (desc.includes('pen')) period = 5;
@@ -461,7 +502,7 @@
     const now = nowSec == null ? Date.now() / 1000 : nowSec;
     const elapsed = Math.max(0, now - (+t.currentPeriodStartTimestamp));
     let sec = (+t.initial || 0) + elapsed;
-    const cap = (t.max != null ? +t.max : (period === 1 ? 2700 : 5400)) + (+t.extra || 0);
+    const cap = (t.max != null ? +t.max : (period === 1 ? 2700 : period >= 3 ? 7200 : 5400)) + (+t.extra || 0);
     if (sec > cap) sec = cap;
     return { minute: Math.floor(sec / 60), period };
   }
@@ -483,6 +524,7 @@
     const row = {
       id: 'sofa:' + ev.id, src: 'sofascore', ssid: ev.id, ts: ev.startTimestamp,
       status, minute: status === 'live' || status === 'finished' ? clock.minute : null, period: clock.period,
+      ht: status === 'live' && !!clock.ht,
       hg: sofaGoals(ev.homeScore), ag: sofaGoals(ev.awayScore),
       hg90: sofaRegulation(ev.homeScore), ag90: sofaRegulation(ev.awayScore),
       homeName: home, awayName: away, teams: [{ name: home }, { name: away }],
@@ -542,7 +584,8 @@
     };
     const low = String(g.statusText || '').toLowerCase();
     let period = 1;
-    if (low.includes('pen')) period = 5;
+    const ht = low === 'halftime' || low === 'ht';
+    if (low.includes('penalt')) period = 5;
     else if (low.includes('extra')) period = 3;
     else if (low.includes('2nd') || (+g.gameTime > 45 && status === 'live')) period = 2;
     const minute = status === 'live' && g.gameTime != null && +g.gameTime >= 0 ? Math.round(+g.gameTime) : null;
@@ -550,7 +593,7 @@
     const raw = ctx && ctx.countries ? (ctx.countries[comp.countryId] || '') : '';
     const row = {
       id: 's365:' + g.id, src: 's365', ts: Math.floor(Date.parse(g.startTime) / 1000),
-      status, minute, period, hg: goals(home), ag: goals(away),
+      status, minute: ht ? null : minute, period, ht: status === 'live' && ht, hg: goals(home), ag: goals(away),
       homeName: home.name, awayName: away.name, teams: [{ name: home.name }, { name: away.name }],
       league_name: g.competitionDisplayName || '',
       league: g.competitionId != null ? 's365.' + g.competitionId : undefined,
@@ -568,10 +611,101 @@
     if (h === A && a === H) return -1;
     return 0;
   }
+  function namesClose(a, b) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    return a.indexOf(b + ' ') === 0 || b.indexOf(a + ' ') === 0;
+  }
+  function looseOrient(m, homeName, awayName) {
+    const exact = orient(m, homeName, awayName);
+    if (exact) return exact;
+    const h = canon(m.teams[0].name), a = canon(m.teams[1].name);
+    const H = canon(homeName), A = canon(awayName);
+    if (namesClose(h, H) && namesClose(a, A)) return 1;
+    if (namesClose(h, A) && namesClose(a, H)) return -1;
+    return 0;
+  }
+  function clockText(m) {
+    if (!m || m.status !== 'live') return '';
+    if (m.ht) return 'HT';
+    if ((+m.period || 0) >= 5) return 'PEN';
+    if (m.minute != null && m.period > 2) return m.minute + "' ET";
+    if (m.minute != null) return m.minute + "'";
+    return 'živě';
+  }
+  function pragueCalendar(offset, now) {
+    const base = now == null ? new Date() : new Date(now);
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(base);
+    const g = t => +parts.find(p => p.type === t).value;
+    const utc = new Date(Date.UTC(g('year'), g('month') - 1, g('day') + (+offset || 0)));
+    return { y: utc.getUTCFullYear(), m: utc.getUTCMonth() + 1, d: utc.getUTCDate(), w: utc.getUTCDay() };
+  }
+  function sameFixture(a, b) {
+    if (!a || !b || !a.teams || !b.teams) return 0;
+    const rel = looseOrient(a, b.teams[0].name, b.teams[1].name);
+    if (!rel) return 0;
+    if (a.ts && b.ts && Math.abs(+a.ts - +b.ts) > 36 * 3600) return 0;
+    return rel;
+  }
+  function richness(m) {
+    let s = 0;
+    if (m.status === 'live') s += 4;
+    else if (m.status === 'finished' || m.status === 'abandoned') s += 2;
+    if (m.pred && m.pred.h != null && !m.pred_low) s += 8;
+    const n = m.n || [0, 0];
+    if (n[0] >= 8) s += 2;
+    if (n[1] >= 8) s += 2;
+    if (m.minute) s += Math.min(+m.minute, 130) / 1000;
+    if (m.hg != null) s += 1;
+    return s;
+  }
+  function foldMatch(keep, other) {
+    if (!keep || !other || !keep.teams || !other.teams) return false;
+    const rel = looseOrient(keep, other.teams[0].name, other.teams[1].name);
+    if (!rel) return false;
+    const ids = keep._ids ? keep._ids.slice() : (keep.id ? [keep.id] : []);
+    const extra = [other.id].concat(other._ids || []);
+    for (let i = 0; i < extra.length; i++) if (extra[i] && ids.indexOf(extra[i]) < 0) ids.push(extra[i]);
+    if (ids.length) keep._ids = ids;
+    if (rel < 0) return true;
+    if ((!keep.pred || keep.pred_low) && other.pred && other.pred.h != null && !other.pred_low) {
+      keep.pred = other.pred;
+      keep.pred_low = false;
+      if (other.lam) keep.lam = other.lam;
+      if (other.elo) keep.elo = other.elo;
+      if (other.n) keep.n = other.n;
+      if (other.xg) keep.xg = other.xg;
+      if (other.ou) keep.ou = other.ou;
+      if (other.btts != null) keep.btts = other.btts;
+      if (other.exact) keep.exact = other.exact;
+      if (other.teams_goals) keep.teams_goals = other.teams_goals;
+      if (other.total_goals) keep.total_goals = other.total_goals;
+      if (other.rho != null) keep.rho = other.rho;
+    }
+    return true;
+  }
+  function dedupeMatches(list) {
+    const out = [];
+    for (const m of list || []) {
+      if (!m || !m.teams) { out.push(m); continue; }
+      let placed = false;
+      for (let i = 0; i < out.length; i++) {
+        if (!sameFixture(out[i], m)) continue;
+        if (richness(m) > richness(out[i])) {
+          foldMatch(m, out[i]);
+          out[i] = m;
+        } else foldMatch(out[i], m);
+        placed = true;
+        break;
+      }
+      if (!placed) out.push(m);
+    }
+    return out;
+  }
   function alignUpdate(m, partial) {
     const rel = orient(m, partial.homeName || partial.teams[0].name, partial.awayName || partial.teams[1].name);
     if (!rel) return null;
-    const upd = { status: partial.status, minute: partial.minute, period: partial.period, winner: partial.winner };
+    const upd = { status: partial.status, minute: partial.minute, period: partial.period, winner: partial.winner, ht: partial.ht };
     if (rel > 0) { upd.hg = partial.hg; upd.ag = partial.ag; if (partial.reds) upd.reds = partial.reds; }
     else { upd.hg = partial.ag; upd.ag = partial.hg; if (partial.reds) upd.reds = [partial.reds[1], partial.reds[0]]; }
     return upd;
@@ -592,8 +726,36 @@
       all.push(t);
     }
     let hits = code ? all.filter(t => idCanon(t.id).code === code) : all;
-    if (!hits.length) hits = all;
     hits.sort((a, b) => (b.n || 0) - (a.n || 0));
+    if (hits[0]) return hits[0];
+    if (code) {
+      const needle = key + ' ';
+      const pref = [];
+      for (const t of teams || []) {
+        const p = idCanon(t && t.id);
+        if (!p || p.code !== code || !(t.n >= 8) || p.key.indexOf(needle) !== 0) continue;
+        pref.push(t);
+      }
+      pref.sort((a, b) => (b.n || 0) - (a.n || 0));
+      if (pref[0] && all.length) return pref[0];
+      if (!all.length && pref[0]) return pref[0];
+    }
+    if (all[0]) {
+      all.sort((a, b) => (b.n || 0) - (a.n || 0));
+      return all[0];
+    }
+    const stem = key.split(' ');
+    if (code && stem.length >= 2) {
+      const short = stem.slice(0, -1).join(' ');
+      const more = [];
+      for (const t of teams || []) {
+        const p = idCanon(t && t.id);
+        if (!p || p.key !== short || p.code !== code || !(t.n >= 8)) continue;
+        more.push(t);
+      }
+      more.sort((a, b) => (b.n || 0) - (a.n || 0));
+      if (more[0]) return more[0];
+    }
     return hits[0] || null;
   }
   function mergeList(prev, payload) {
@@ -604,7 +766,7 @@
     for (const m of matches) if (m && m.id) byId.set(m.id, m);
     const out = [];
     const seen = new Set();
-    const keep = ['hg', 'ag', 'minute', 'period', 'status', 'reds', 'winner', 'live', 'pred', 'lam', 'rho', 'ou', 'btts', 'exact', '_accAt', '_lk', '_var'];
+    const keep = ['hg', 'ag', 'minute', 'period', 'ht', 'status', 'reds', 'winner', 'live', 'pred', 'lam', 'rho', 'ou', 'btts', 'exact', '_accAt', '_lk', '_var'];
     for (const raw of payload.matches || []) {
       if (!raw || !raw.id) continue;
       seen.add(raw.id);
@@ -622,10 +784,19 @@
     return { generated: payload.generated, matches: out, changed: true };
   }
   function priorOf(region) { return REGION_BASE[region] || 1450; }
+  function favHit(m, fav) {
+    if (!m || !fav) return false;
+    const ids = [m.id].concat(m._ids || []);
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (!id) continue;
+      if (typeof fav.has === 'function' ? fav.has(id) : fav.indexOf(id) >= 0) return true;
+    }
+    return false;
+  }
   function listVisible(m, ui) {
     if (!m || !ui) return false;
-    const fav = ui.fav;
-    const hasFav = !!(fav && (typeof fav.has === 'function' ? fav.has(m.id) : fav.indexOf(m.id) >= 0));
+    const hasFav = favHit(m, ui.fav);
     if (ui.view === 'oblibene') return hasFav;
     if (ui.view !== 'zapasy') return false;
     const day = ui.day || 0;
@@ -737,5 +908,6 @@
     goalView, goalText,
     applyLive, ensurePred, liveCalc, liveKey, findTeam, priorOf, listVisible, mergeList, sofaGoals, sofaRegulation,
     parseEspnEvent, parseSofaEvent, parseSofaIncidents, parseSofaOdds, parse365, orient, alignUpdate, espnMinute, sofaMinute,
+    clockText, pragueCalendar, foldMatch, dedupeMatches, sameFixture, favHit,
   };
 });

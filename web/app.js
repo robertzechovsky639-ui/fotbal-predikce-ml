@@ -13,7 +13,7 @@ function scoreSig(m) {
   const p = probs(m);
   const g = Fotbal.goalText(m);
   const goal = g ? g.home + g.away + g.total : '';
-  return [m.status, m.hg, m.ag, m.minute, m.period, (m.reds || []).join(','), p.h == null ? '' : Math.round(p.h * 100), Math.round((p.d || 0) * 100), Math.round((p.a || 0) * 100), m.pred_low ? 1 : 0, goal].join('|');
+  return [m.status, m.hg, m.ag, m.minute, m.ht ? 1 : 0, m.period, (m.reds || []).join(','), p.h == null ? '' : Math.round(p.h * 100), Math.round((p.d || 0) * 100), Math.round((p.a || 0) * 100), m.pred_low ? 1 : 0, goal].join('|');
 }
 function visKey() {
   if (S.view === 'oblibene') return 'fav';
@@ -51,25 +51,24 @@ function card(m) {
   const line = (i) => `<div class="row"><div class="pl ${m.winner === i ? 'w' : ''}">${esc(m.teams[i].name)}</div><div class="scoreline">${m.status === 'upcoming' ? (i === 0 ? t : '') : (i === 0 ? (m.hg ?? '') : (m.ag ?? ''))}</div></div>`;
   const tri = p.h == null ? '<div class="na">Predikce se počítá…</div>' : `<div class="lbl">${m.status === 'live' ? 'PREDIKCE TEĎ' : 'PREDIKCE'}${m.pred_low ? ' <span class="low">nižší jistota</span>' : ''}</div><div class="tri"><div class="h"><b>${pct(p.h)}</b>1</div><div class="d"><b>${pct(p.d)}</b>X</div><div class="a"><b>${pct(p.a)}</b>2</div></div>`;
   const gl = goalHtml(m);
-  const live = m.status === 'live' ? `<span class="livebadge">▶ ${m.minute != null ? m.minute + "'" : 'živě'}</span>` : '';
+  const live = m.status === 'live' ? `<span class="livebadge">▶ ${Fotbal.clockText(m)}</span>` : '';
   return `<div class="m" data-id="${esc(m.id)}" data-sig="${esc(scoreSig(m))}">${line(0)}${line(1)}${live}${tri}${gl}${m.odds ? `<div class="odds"><span>1 ${f2(m.odds.h)}</span><span>X ${f2(m.odds.d)}</span><span>2 ${f2(m.odds.a)}</span></div>` : ''}</div>`;
 }
 function matchesView(fav) {
-  const today = new Date();
   let h = '';
   if (!fav) {
     h += `<h1>ZÁPASY <span class="pill">● ${ST.all.filter(m => m.status === 'live').length} živě</span></h1><div class="days">`;
     for (let d = -2; d <= 2; d++) {
-      const x = new Date(today); x.setDate(x.getDate() + d);
-      const n = d === 0 ? 'Dnes' : d === -1 ? 'Včera' : d === 1 ? 'Zítra' : DN[x.getDay()];
-      h += `<button data-day="${d}" class="${d === S.day ? 'on' : ''}"><b>${n}</b><small>${x.getDate()}. ${x.getMonth() + 1}.</small></button>`;
+      const x = Fotbal.pragueCalendar(d);
+      const n = d === 0 ? 'Dnes' : d === -1 ? 'Včera' : d === 1 ? 'Zítra' : DN[x.w];
+      h += `<button data-day="${d}" class="${d === S.day ? 'on' : ''}"><b>${n}</b><small>${x.d}. ${x.m}.</small></button>`;
     }
     const regs = [['focus', 'Top + Česko + poháry'], ['all', 'Vše'], ...Object.entries(REG_LABEL)];
     h += `</div><div class="filters"><div class="sel"><label>SOUTĚŽE</label><select id="reg">${regs.map(([v, t]) => `<option value="${v}" ${S.reg === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="sel"><label>FILTR</label><select id="filt">${[['all', 'Vše'], ['live', 'Živě'], ['up', 'Nadcházející'], ['fin', 'Dohrané']].map(([v, t]) => `<option value="${v}" ${S.filt === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <button class="star ${S.favOnly ? 'on' : ''}" id="favt">${S.favOnly ? '★' : '☆'}</button></div>`;
   } else h += `<h1>OBLÍBENÉ</h1>`;
-  const all = fav ? ST.all.filter(m => S.fav.has(m.id)) : filt(ST.all.filter(m => m.day === S.day || (S.day === 0 && m.status === 'live')));
+  const all = fav ? ST.all.filter(m => Fotbal.favHit(m, S.fav)) : filt(ST.all.filter(m => m.day === S.day || (S.day === 0 && m.status === 'live')));
   if (!all.length) return h + `<div class="empty">${ST.all.length ? 'Žádné zápasy pro zvolený filtr.' : 'Načítám…'}${fav ? '<br>Hvězdičkou v detailu přidáš oblíbené.' : ''}</div>`;
   const g = {};
   for (const m of all) { const k = (m.league_name || m.league || 'Soutěž') + '|' + (m.region || '') + '|' + (m.country || '') + '|' + (m.segment || ''); (g[k] = g[k] || []).push(m); }
@@ -166,15 +165,21 @@ function drawDetail() {
   const el = $('#detail'); el.classList.remove('hidden');
   const p = probs(d);
   const score = d.hg == null ? '–' : (d.hg + ' : ' + d.ag);
-  let h = `<div class="dh"><button class="back" id="bk">‹</button><div class="tt"><b>${esc(d.league_name || '')}</b><small>${esc(metaLine(d))}</small></div><button class="star ${S.fav.has(d.id) ? 'on' : ''}" id="fv">${S.fav.has(d.id) ? '★' : '☆'}</button></div>
+  const on = Fotbal.favHit(d, S.fav);
+  let h = `<div class="dh"><button class="back" id="bk">‹</button><div class="tt"><b>${esc(d.league_name || '')}</b><small>${esc(metaLine(d))}</small></div><button class="star ${on ? 'on' : ''}" id="fv">${on ? '★' : '☆'}</button></div>
     <div class="score"><div class="pp"><div class="av">${esc((d.teams[0].name || '?').slice(0, 2).toUpperCase())}</div><b>${esc(d.teams[0].name)}</b></div>
-    <div class="mid"><div class="big">${score}</div><small>${d.status === 'live' ? 'živě ' + (d.minute != null ? d.minute + "'" : '') : d.status === 'finished' ? 'konec' : new Date(d.ts * 1000).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
+    <div class="mid"><div class="big">${score}</div><small>${d.status === 'live' ? 'živě ' + Fotbal.clockText(d) : d.status === 'finished' ? 'konec' : new Date(d.ts * 1000).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'short', hour: '2-digit', minute: '2-digit' })}</small></div>
     <div class="pp"><div class="av">${esc((d.teams[1].name || '?').slice(0, 2).toUpperCase())}</div><b>${esc(d.teams[1].name)}</b></div></div>
     <div class="tabs">${[['prehled', 'Přehled'], ['predikce', 'Predikce'], ['kurzy', 'Kurzy'], ['h2h', 'H2H'], ['stat', 'Statistiky']].map(([k, t]) => `<button data-t="${k}" class="${S.tab === k ? 'on' : ''}">${t}</button>`).join('')}</div>`;
   h += ({ prehled: tPre, predikce: tPred, kurzy: tKur, h2h: tH, stat: tStat }[S.tab])(d, p);
   el.innerHTML = h;
   $('#bk').onclick = () => { el.classList.add('hidden'); S.detail = null; };
-  $('#fv').onclick = () => { S.fav.has(d.id) ? S.fav.delete(d.id) : S.fav.add(d.id); saveFav(); drawDetail(); };
+  $('#fv').onclick = () => {
+    const ids = [d.id].concat(d._ids || []).filter(Boolean);
+    if (Fotbal.favHit(d, S.fav)) ids.forEach(id => S.fav.delete(id));
+    else S.fav.add(d.id);
+    saveFav(); drawDetail();
+  };
   el.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.t; drawDetail(); });
 }
 function goalHtml(m) {
@@ -276,7 +281,7 @@ function patchCard(el, m) {
     vals[2].textContent = gt.total;
   }
   const badge = el.querySelector('.livebadge');
-  if (badge) badge.textContent = '▶ ' + (m.minute != null ? m.minute + "'" : 'živě');
+  if (badge) badge.textContent = '▶ ' + Fotbal.clockText(m);
   const low = el.querySelector('.low');
   if (m.pred_low && !low) return false;
   el.dataset.sig = sig;
@@ -292,14 +297,15 @@ function paintList(ids) {
 }
 function paintListNow(ids) {
   if (S.view !== 'zapasy' && S.view !== 'oblibene') {
-    if (S.detail && ids.indexOf(S.detail.id) >= 0) refreshDetail();
+    if (detailTouched(ids)) refreshDetail();
     return;
   }
   if (visKey() !== S.vis) { render(); return; }
   let missing = false;
   for (const id of ids) {
     const m = ST.byId[id];
-    const sel = '.m[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
+    const shown = m && m.id ? m.id : id;
+    const sel = '.m[data-id="' + (window.CSS && CSS.escape ? CSS.escape(shown) : shown) + '"]';
     if (m && m._reclass) { delete m._reclass; missing = true; continue; }
     if (!m || !Fotbal.listVisible(m, S)) {
       if (document.querySelector(sel)) missing = true;
@@ -316,7 +322,12 @@ function paintListNow(ids) {
   if (missing) render();
   const pill = document.querySelector('h1 .pill');
   if (pill) { const t = '● ' + ST.all.filter(m => m.status === 'live').length + ' živě'; if (pill.textContent !== t) pill.textContent = t; }
-  if (S.detail && ids.indexOf(S.detail.id) >= 0) refreshDetail();
+  if (detailTouched(ids)) refreshDetail();
+}
+function detailTouched(ids) {
+  if (!S.detail) return false;
+  const mine = [S.detail.id].concat(S.detail._ids || []);
+  return mine.some(id => id && ids.indexOf(id) >= 0);
 }
 function refreshDetail() {
   const live = ST.byId[S.detail.id]; if (!live) return;
