@@ -510,44 +510,77 @@ def _copy_clock(dst, src):
         dst["reds"] = list(src["reds"])
 
 
+def _period_of(item):
+    try:
+        return int(item.get("period") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _lift_minute(dst, src):
     src_min, dst_min = _minute(src), _minute(dst)
     if src_min is None:
         return
     if dst_min is None or src_min > dst_min:
         dst["minute"] = src.get("minute")
-        if src.get("period") is not None:
-            dst["period"] = src.get("period")
+
+
+def _raise_phase(keep, other):
+    """HT, prodloužení a penalty se berou i když skóre drží jiný zdroj. Nižší perioda je nesmaže."""
+    if _behind(_score_pair(other), _score_pair(keep)):
+        return
+    other_period = _period_of(other)
+    if other_period > _period_of(keep):
+        keep["period"] = other.get("period")
+        if other_period >= 3:
+            keep["ht"] = False
+    other_min, keep_min = _minute(other), _minute(keep)
+    if other_min is not None and (keep_min is None or other_min > keep_min):
+        keep["minute"] = other.get("minute")
+    period = _period_of(keep)
+    if period >= 5 or period > 2:
+        keep["ht"] = False
+    elif other.get("ht") and period < 2:
+        keep["ht"] = True
+    elif keep.get("ht") and period >= 2:
+        keep["ht"] = False
+    reds = list(keep.get("reds") or [0, 0])
+    extra = other.get("reds")
+    if extra and len(extra) == 2 and len(reds) == 2:
+        keep["reds"] = [max(int(reds[0] or 0), int(extra[0] or 0)), max(int(reds[1] or 0), int(extra[1] or 0))]
 
 
 def overlay_fresher(keep, other):
-    """Na už srovnané strany položí pokročilejší skóre. Skóre se nemíchá."""
+    """Na už srovnané strany položí pokročilejší skóre, minutu a fázi. Skóre se nemíchá."""
+    old = {key: keep.get(key) for key in ("hg", "ag", "status", "minute", "period", "ht", "reds", "hg90", "ag90")}
+    if isinstance(old.get("reds"), list):
+        old["reds"] = list(old["reds"])
     keep_score, other_score = _score_pair(keep), _score_pair(other)
     if other_score is None:
         _lift_minute(keep, other)
         if keep_score is None and _STATUS_RANK.get(other.get("status"), 0) > _STATUS_RANK.get(keep.get("status"), 0):
             keep["status"] = other.get("status")
-        return keep
-    if keep_score is None or _behind(keep_score, other_score):
+    elif keep_score is None or _behind(keep_score, other_score):
         saved_min, saved_period = keep.get("minute"), keep.get("period")
         _copy_clock(keep, other)
         if _minute({"minute": saved_min}) is not None and (
             _minute(other) is None or _minute({"minute": saved_min}) > _minute(other)
         ):
             keep["minute"] = saved_min
-            keep["period"] = saved_period
-        return keep
-    if _behind(other_score, keep_score):
+            if _period_of({"period": saved_period}) > _period_of(other):
+                keep["period"] = saved_period
+    elif _behind(other_score, keep_score):
         _lift_minute(keep, other)
-        return keep
-    keep_rank = _STATUS_RANK.get(keep.get("status"), 0)
-    other_rank = _STATUS_RANK.get(other.get("status"), 0)
-    keep_min, other_min = _minute(keep), _minute(other)
-    if keep_score == other_score and other_min is None and keep_min is not None and other_rank > keep_rank:
-        return keep
-    other_clock = other_min is not None and (keep_min is None or other_min > keep_min)
-    if other_rank > keep_rank or other_clock:
-        _copy_clock(keep, other)
+    else:
+        keep_rank = _STATUS_RANK.get(keep.get("status"), 0)
+        other_rank = _STATUS_RANK.get(other.get("status"), 0)
+        keep_min, other_min = _minute(keep), _minute(other)
+        bury = keep_score == other_score and other_min is None and keep_min is not None and other_rank > keep_rank
+        other_clock = other_min is not None and (keep_min is None or other_min > keep_min)
+        if not bury and (other_rank > keep_rank or other_clock):
+            _copy_clock(keep, other)
+    _raise_phase(keep, old)
+    _raise_phase(keep, other)
     return keep
 
 

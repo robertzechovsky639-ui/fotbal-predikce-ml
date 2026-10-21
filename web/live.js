@@ -371,16 +371,14 @@
     if (m.status === 'postponed' && upd.status === 'upcoming') return false;
     if (upd.status && rankStatus(upd.status) < rankStatus(m.status)) return false;
     const uh = upd.hg, ua = upd.ag;
+    const toPens = (+upd.period || 0) >= 5 && (+m.period || 0) < 5;
     let minute = upd.minute;
     if (!terminal && minute != null && m.minute != null && minute < m.minute) {
-      if (upd.ht) minute = null;
+      if (upd.ht || toPens) minute = null;
       else return false;
     }
     let period = upd.period;
-    if (!terminal && period != null && m.period != null && period < m.period) {
-      if (upd.ht) period = null;
-      else return false;
-    }
+    if (!terminal && period != null && m.period != null && period < m.period) period = null;
     if (upd.reds && m.reds && (upd.reds[0] < m.reds[0] || upd.reds[1] < m.reds[1])) return false;
     const drop = (m.hg != null && uh != null && uh < m.hg) || (m.ag != null && ua != null && ua < m.ag);
     if (drop) {
@@ -407,7 +405,10 @@
     if (ua != null) m.ag = ua;
     if (upd.status) m.status = upd.status;
     if (minute != null && (m.minute == null || minute >= m.minute)) m.minute = minute;
-    if (upd.ht === true || upd.ht === false) m.ht = upd.ht;
+    const pastHt = (+m.period || 0) >= 2;
+    if (upd.ht === true && pastHt && !toPens) {
+      /* druhý poločas už běží, staré HT ho nesmí schovat */
+    } else if (upd.ht === true || upd.ht === false) m.ht = upd.ht;
     if (terminal) m.ht = false;
     if (period != null && (m.period == null || period >= m.period)) m.period = period;
     if (upd.reds) m.reds = [upd.reds[0] || 0, upd.reds[1] || 0];
@@ -690,35 +691,57 @@
   function liftMinute(dst, src) {
     const sm = minuteOf(src), dm = minuteOf(dst);
     if (sm == null) return;
-    if (dm == null || sm > dm) {
-      dst.minute = src.minute;
-      if (src.period != null) dst.period = src.period;
+    if (dm == null || sm > dm) dst.minute = src.minute;
+  }
+  function periodOf(m) { return +((m && m.period) || 0) || 0; }
+  function raisePhase(keep, other) {
+    if (!other) return;
+    const os = scorePair(other), ks = scorePair(keep);
+    if (scoreBehind(os, ks)) return;
+    const op = periodOf(other);
+    if (op > periodOf(keep)) {
+      keep.period = other.period;
+      if (op >= 3) keep.ht = false;
     }
+    const om = minuteOf(other), km = minuteOf(keep);
+    if (om != null && (km == null || om > km)) keep.minute = other.minute;
+    const period = periodOf(keep);
+    if (period >= 5 || period > 2) keep.ht = false;
+    else if (other.ht && period < 2) keep.ht = true;
+    else if (keep.ht && period >= 2) keep.ht = false;
+    const kr = keep.reds || [0, 0], rr = other.reds;
+    if (rr && rr.length === 2) keep.reds = [Math.max(+kr[0] || 0, +rr[0] || 0), Math.max(+kr[1] || 0, +rr[1] || 0)];
   }
   function overlayFresher(keep, other) {
+    const old = {
+      hg: keep.hg, ag: keep.ag, status: keep.status, minute: keep.minute, period: keep.period, ht: keep.ht,
+      reds: keep.reds ? keep.reds.slice() : keep.reds,
+    };
     const ks = scorePair(keep), os = scorePair(other);
     const rank = { upcoming: 0, postponed: 1, cancelled: 1, live: 2, finished: 3, abandoned: 3 };
     if (!os) {
       liftMinute(keep, other);
       if (!ks && (rank[other.status] || 0) > (rank[keep.status] || 0)) keep.status = other.status;
-      return;
-    }
-    if (!ks || scoreBehind(ks, os)) {
+    } else if (!ks || scoreBehind(ks, os)) {
       const savedMin = keep.minute, savedPeriod = keep.period;
       copyClock(keep, other);
       const saved = minuteOf({ minute: savedMin });
       if (saved != null && (minuteOf(other) == null || saved > minuteOf(other))) {
         keep.minute = savedMin;
-        keep.period = savedPeriod;
+        if (periodOf({ period: savedPeriod }) > periodOf(other)) keep.period = savedPeriod;
       }
-      return;
+    } else if (scoreBehind(os, ks)) {
+      liftMinute(keep, other);
+    } else {
+      const kr = rank[keep.status] || 0, orr = rank[other.status] || 0;
+      const km = minuteOf(keep), om = minuteOf(other);
+      const bury = ks[0] === os[0] && ks[1] === os[1] && om == null && km != null && orr > kr;
+      const otherClock = om != null && (km == null || om > km);
+      if (!bury && (orr > kr || otherClock)) copyClock(keep, other);
     }
-    if (scoreBehind(os, ks)) { liftMinute(keep, other); return; }
-    const kr = rank[keep.status] || 0, orr = rank[other.status] || 0;
-    const km = minuteOf(keep), om = minuteOf(other);
-    if (ks[0] === os[0] && ks[1] === os[1] && om == null && km != null && orr > kr) return;
-    const otherClock = om != null && (km == null || om > km);
-    if (orr > kr || otherClock) copyClock(keep, other);
+    raisePhase(keep, old);
+    raisePhase(keep, other);
+    if (keep.status === 'live') { keep.live = null; keep._lk = null; }
   }
   function orientedScore(m, rel) {
     if (rel > 0) return {
@@ -751,6 +774,7 @@
     const extra = [other.id].concat(other._ids || []);
     for (let i = 0; i < extra.length; i++) if (extra[i] && ids.indexOf(extra[i]) < 0) ids.push(extra[i]);
     if (ids.length) keep._ids = ids;
+    if (other.ssid && !keep.ssid) keep.ssid = other.ssid;
     overlayFresher(keep, orientedScore(other, rel));
     if (rel < 0) return true;
     if ((!keep.pred || keep.pred_low) && other.pred && other.pred.h != null && !other.pred_low) {
@@ -785,6 +809,7 @@
       }
       if (!placed) out.push(m);
     }
+    for (const m of out) if (m && m.status === 'live') liveCalc(m);
     return out;
   }
   function alignUpdate(m, partial) {

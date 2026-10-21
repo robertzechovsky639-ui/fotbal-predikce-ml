@@ -546,6 +546,47 @@ const stillLive = F.dedupeMatches([
 ]);
 assert.strictEqual(stillLive[0].status, 'live');
 assert.strictEqual(stillLive[0].hg, 1);
+const htFold = F.dedupeMatches([
+  card('ht1', 'Arsenal', 'Chelsea', { minute: 40, hg: 0, ag: 0, period: 1, ht: false }),
+  card('ht2', 'Arsenal', 'Chelsea', { minute: null, hg: 0, ag: 0, period: 1, ht: true, ssid: '99' }),
+]);
+assert.strictEqual(htFold.length, 1);
+assert.strictEqual(htFold[0].ht, true);
+assert.strictEqual(htFold[0].ssid, '99');
+assert.strictEqual(F.clockText(htFold[0]), 'HT');
+const penFold = F.dedupeMatches([
+  card('pen1', 'Arsenal', 'Chelsea', { minute: 90, hg: 1, ag: 1, period: 2, ht: false }),
+  card('pen2', 'Arsenal', 'Chelsea', { minute: null, hg: 1, ag: 1, period: 5, ht: false }),
+]);
+assert.strictEqual(penFold[0].period, 5);
+assert.strictEqual(penFold[0].hg, 1);
+assert.strictEqual(F.clockText(penFold[0]), 'PEN');
+const etFold = F.dedupeMatches([
+  card('et1', 'Arsenal', 'Chelsea', { minute: 100, hg: 1, ag: 1, period: 2 }),
+  card('et2', 'Arsenal', 'Chelsea', { minute: 95, hg: 2, ag: 1, period: 3 }),
+]);
+assert.strictEqual(etFold[0].hg, 2);
+assert.strictEqual(etFold[0].ag, 1);
+assert.strictEqual(etFold[0].period, 3);
+assert.strictEqual(etFold[0].minute, 100);
+assert.strictEqual(F.clockText(etFold[0]), "100' ET");
+const goalPeriod = { status: 'live', hg: 1, ag: 0, minute: 60, period: 2, ht: false, pred: { h: 0.5, d: 0.3, a: 0.2 }, lam: [1.2, 0.8] };
+assert.strictEqual(F.applyLive(goalPeriod, { status: 'live', hg: 2, ag: 0, minute: 70, period: 1 }), true);
+assert.strictEqual(goalPeriod.hg, 2);
+assert.strictEqual(goalPeriod.minute, 70);
+assert.strictEqual(goalPeriod.period, 2);
+assert.ok(goalPeriod.live && goalPeriod.live.p.h > 0.5);
+const pensUp = { status: 'live', hg: 1, ag: 1, minute: 90, period: 2, pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1, 1] };
+assert.strictEqual(F.applyLive(pensUp, { status: 'live', hg: 1, ag: 1, minute: 0, period: 5 }), true);
+assert.strictEqual(pensUp.period, 5);
+assert.strictEqual(pensUp.minute, 90);
+assert.strictEqual(F.clockText(pensUp), 'PEN');
+const stalePred = card('sp', 'Arsenal', 'Chelsea', { minute: 20, hg: 0, ag: 0, period: 1, pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1.4, 1.1], pred_low: false });
+F.liveCalc(stalePred);
+const beforeH = stalePred.live.p.h;
+const movedPred = F.dedupeMatches([stalePred, card('sp2', 'Arsenal', 'Chelsea', { minute: 20, hg: 1, ag: 0, period: 1 })]);
+assert.strictEqual(movedPred[0].hg, 1);
+assert.ok(movedPred[0].live && movedPred[0].live.p.h > beforeH);
 assert.strictEqual(F.listVisible({ id: 'keep', _ids: ['keep', 'drop'], region: 'europe_top', status: 'live', day: 0, segment: 'main' }, { view: 'oblibene', fav: ['drop'] }), true);
 const pages = fs.readFileSync(path.join(__dirname, '../.github/workflows/pages.yml'), 'utf8');
 assert.ok(pages.includes("github.event_name == 'push'"));

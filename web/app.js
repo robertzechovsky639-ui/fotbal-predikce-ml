@@ -155,9 +155,21 @@ function bind() {
     $('#cs').onclick = send; $('#cq').onkeydown = e => { if (e.key === 'Enter') send(); };
   }
 }
+function liveClock(live) {
+  return {
+    id: live.id, status: live.status, hg: live.hg, ag: live.ag, minute: live.minute, period: live.period, ht: live.ht,
+    reds: live.reds, pred: live.pred, live: live.live, lam: live.lam, xg: live.xg, ou: live.ou, btts: live.btts,
+    exact: live.exact, teams_goals: live.teams_goals, total_goals: live.total_goals, teams: live.teams,
+    _ids: live._ids, ssid: live.ssid, src: live.src,
+  };
+}
 async function openDetail(id) {
   S.detail = ST.byId[id]; S.tab = 'prehled';
-  try { const d = await staticApi('/api/match/' + encodeURIComponent(id)); if (d && d.id) S.detail = Object.assign(ST.byId[id] || {}, d); } catch (e) {}
+  try {
+    const d = await staticApi('/api/match/' + encodeURIComponent(id));
+    const live = ST.byId[id];
+    if (d && live) S.detail = Object.assign({}, live, d, liveClock(live));
+  } catch (e) {}
   drawDetail();
 }
 function drawDetail() {

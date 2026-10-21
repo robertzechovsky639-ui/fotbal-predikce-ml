@@ -191,3 +191,18 @@ def test_loose_names_merge_and_stale_full_time_does_not_hide_a_goal():
         _row("s365", "Arsenal", "Chelsea", status="postponed", hg=None, ag=None, minute=None),
     ])
     assert still_live[0]["status"] == "live" and still_live[0]["hg"] == 1
+    ht = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=40, hg=0, ag=0, period=1, ht=False),
+        _row("sofa", "Arsenal", "Chelsea", minute=None, hg=0, ag=0, period=1, ht=True),
+    ])
+    assert ht[0]["ht"] is True and ht[0]["hg"] == 0
+    pen = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=90, hg=1, ag=1, period=2, ht=False),
+        _row("s365", "Arsenal", "Chelsea", minute=None, hg=1, ag=1, period=5, ht=False),
+    ])
+    assert pen[0]["period"] == 5 and pen[0]["hg"] == 1 and pen[0]["ht"] is not True
+    et = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=100, hg=1, ag=1, period=2),
+        _row("sofa", "Arsenal", "Chelsea", minute=95, hg=2, ag=1, period=3),
+    ])
+    assert et[0]["hg"] == 2 and et[0]["ag"] == 1 and et[0]["period"] == 3 and et[0]["minute"] == 100
