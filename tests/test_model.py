@@ -60,6 +60,13 @@ def test_canon_clubs():
     assert names.canon("Union St.-Gilloise") == "st gilloise"
     assert names.canon("Peterborough United") == "peterboro"
     assert names.canon("Bristol Rovers") == "bristol rvs"
+    assert names.canon("Chivas") == names.canon("Guadalajara") == "guadalajara chivas"
+    assert names.canon("Deportivo Guadalajara") == "deportivo guadalajara"
+    assert names.canon("Atlas Guadalajara") == "atlas"
+    assert names.canon("MK Dons") == "milton keynes dons"
+    assert names.canon("Atlético-MG") == names.canon("Atlético Mineiro") == "atletico mg"
+    assert names.canon("U. La Calera") == "union la calera"
+    assert names.canon("Central Córdoba SdE") == names.canon("Central Córdoba (Santiago del Estero)") == "central cordoba sde"
     teams = {
         "club:eng:manchester united": {"n": 1373, "elo": 1800},
         "club:eng:manchester city": {"n": 1454, "elo": 1850},

@@ -10,7 +10,8 @@ RULES = json.loads((ROOT / "web" / "comp_rules.json").read_text(encoding="utf-8"
 
 _TAG_PRIORITY = ("women", "college", "youth", "reserve")
 _YOUTH = re.compile(r"\b(u1[0-9]|u2[0-3]|youth|junior)\b")
-_WOMEN = re.compile(r"\b(women|woman|femen|feminin|frauen|ladies|damen|nwsl)\b|\(w\)")
+_WOMEN_WORD = re.compile(r"\b(women|woman|femen|feminin|frauen|ladies|damen|nwsl)\b")
+_WOMEN_MARK = re.compile(r"\(w\)")
 _RESERVE = re.compile(r"\b(ii|iii|iv|reserves|reserve|rezerva|rezervy)\b")
 _COLLEGE_SLUG = re.compile(r"(^|[-.])ncaa([-.]\d|$)|college")
 _NCAA_LABEL = re.compile(r"\bncaa\b")
@@ -41,8 +42,10 @@ def _tokens(*parts):
 
 def tags_of(home, away, slug, tournament_slug, tournament_id, competition_id, label=""):
     tags = []
+    raw = names.strip_accents(" ".join(str(p) for p in (home, away, slug, tournament_slug, label) if p))
     blob = _tokens(home, away, slug, tournament_slug)
-    if _WOMEN.search(blob) or _has("women_s365", competition_id) or _has("women_sofa", tournament_id):
+    if (_WOMEN_WORD.search(blob) or _WOMEN_MARK.search(raw)
+            or _has("women_s365", competition_id) or _has("women_sofa", tournament_id)):
         tags.append("women")
     if (_has("college_sofa", tournament_id) or (tournament_slug and _COLLEGE_SLUG.search(str(tournament_slug)))
             or (slug and "ncaa" in str(slug)) or _NCAA_LABEL.search(_tokens(label))):

@@ -96,3 +96,113 @@ def test_flipped_sources_merge_without_swapping_score():
     assert row["home_name"] == "Arsenal" and row["away_name"] == "Chelsea"
     assert row["hg"] == 1 and row["ag"] == 0
     assert row["reds"] == [0, 1]
+    assert row["minute"] == 55
+    assert row["odds"]["h"] == 2.1 and row["odds"]["a"] == 3.2
+    assert row["src"] == "espn"
+
+
+def _row(src, home, away, **extra):
+    ts = int(dt.datetime(2026, 10, 20, 18, 0, tzinfo=dt.timezone.utc).timestamp())
+    item = {
+        "ts": ts, "home_name": home, "away_name": away, "src": src, "id": src + ":" + home,
+        "status": "live", "hg": 0, "ag": 0, "minute": 10, "segment": "main", "odds": None, "reds": [0, 0],
+    }
+    item.update(extra)
+    return item
+
+
+def test_cross_source_aliases_keep_the_further_score():
+    espn = _row("espn", "Guadalajara", "Necaxa", hg=0, ag=0, minute=11)
+    other = _row("s365", "Chivas", "Necaxa", hg=1, ag=0, minute=30)
+    merged = ex.merge([espn, other])
+    assert len(merged) == 1
+    assert merged[0]["src"] == "espn"
+    assert merged[0]["home_name"] == "Guadalajara"
+    assert merged[0]["hg"] == 1 and merged[0]["ag"] == 0 and merged[0]["minute"] == 30
+    assert ex.merge([
+        espn,
+        _row("s365", "Deportivo Guadalajara", "Necaxa", hg=3, ag=0, minute=80),
+    ]).__len__() == 2
+    women = _row("s365", "Guadalajara Chivas (W)", "Necaxa (W)", segment="women", ts=espn["ts"] + 10740, status="upcoming")
+    assert len(ex.merge([espn, women])) == 2
+    assert len(ex.merge([espn, _row("s365", "Guadalajara Chivas (W)", "Necaxa (W)", ts=espn["ts"] + 10740)])) == 2
+
+
+def test_loose_names_merge_and_stale_full_time_does_not_hide_a_goal():
+    assert len(ex.merge([
+        _row("espn", "Blackpool", "Milton Keynes Dons", status="finished", minute=98, hg=2, ag=0),
+        _row("s365", "Blackpool", "MK Dons", status="finished", minute=None, hg=2, ag=0),
+    ])) == 1
+    assert len(ex.merge([
+        _row("espn", "Montevideo City Torque", "Atlético-MG"),
+        _row("s365", "Montevideo City Torque", "Atlético Mineiro"),
+    ])) == 1
+    assert len(ex.merge([
+        _row("espn", "Sanfrecce Hiroshima", "Kyoto Sanga"),
+        _row("s365", "Hiroshima Sanfrecce", "Kyoto"),
+    ])) == 1
+    assert len(ex.merge([
+        _row("espn", "Avispa Fukuoka", "Fagiano Okayama"),
+        _row("s365", "Fukuoka", "Okayama"),
+    ])) == 1
+    live = _row("sofa", "Criciúma U20", "Flamengo U20", segment="youth", status="live", minute=91, hg=0, ag=2)
+    bare = _row("s365", "Criciúma/Sc Youth", "Flamengo/RJ Youth", segment="youth", status="finished", minute=None, hg=0, ag=2)
+    folded = ex.merge([bare, live])
+    assert len(folded) == 1
+    assert folded[0]["status"] == "live" and folded[0]["minute"] == 91
+    assert folded[0]["hg"] == 0 and folded[0]["ag"] == 2
+    ahead = _row("s365", "Criciúma/Sc Youth", "Flamengo/RJ Youth", segment="youth", status="finished", minute=None, hg=0, ag=3)
+    taken = ex.merge([live, ahead])
+    assert taken[0]["status"] == "finished" and taken[0]["ag"] == 3
+    hidden = ex.merge([
+        _row("espn", "Blackpool", "MK Dons", status="finished", minute=None, hg=0, ag=0),
+        _row("s365", "Blackpool", "Milton Keynes Dons", status="live", minute=50, hg=1, ag=0),
+    ])
+    assert hidden[0]["hg"] == 1 and hidden[0]["status"] == "live"
+    clock = ex.merge([
+        _row("espn", "Avispa Fukuoka", "Okayama", minute=70, hg=1, ag=0),
+        _row("s365", "Fukuoka", "Okayama", minute=40, hg=2, ag=0),
+    ])
+    assert clock[0]["hg"] == 2 and clock[0]["minute"] == 70
+    split = ex.merge([
+        _row("espn", "Manchester United", "Chelsea"),
+        _row("s365", "Manchester City", "Chelsea"),
+    ])
+    assert len(split) == 2
+    hapoel = ex.merge([
+        _row("espn", "Hapoel Ra'anana", "Maccabi Haifa"),
+        _row("s365", "Hapoel Afula", "Maccabi Haifa"),
+    ])
+    assert len(hapoel) == 2
+    later = _row("s365", "Arsenal", "Chelsea", ts=_row("espn", "Arsenal", "Chelsea")["ts"] + 3 * 3600, hg=1, ag=0)
+    assert len(ex.merge([_row("espn", "Arsenal", "Chelsea", hg=0, ag=0), later])) == 2
+    swapped = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=40, hg=1, ag=0),
+        _row("s365", "Arsenal", "Chelsea", minute=70, hg=0, ag=1),
+    ])
+    assert swapped[0]["hg"] == 0 and swapped[0]["ag"] == 1 and swapped[0]["minute"] == 70
+    postponed = ex.merge([
+        _row("espn", "Universidad de Chile", "Antofagasta", status="upcoming", hg=None, ag=None, minute=None),
+        _row("s365", "Universidad de Chile", "Deportes Antofagasta", status="postponed", hg=None, ag=None, minute=None),
+    ])
+    assert len(postponed) == 1 and postponed[0]["status"] == "postponed"
+    still_live = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", status="live", minute=20, hg=1, ag=0),
+        _row("s365", "Arsenal", "Chelsea", status="postponed", hg=None, ag=None, minute=None),
+    ])
+    assert still_live[0]["status"] == "live" and still_live[0]["hg"] == 1
+    ht = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=40, hg=0, ag=0, period=1, ht=False),
+        _row("sofa", "Arsenal", "Chelsea", minute=None, hg=0, ag=0, period=1, ht=True),
+    ])
+    assert ht[0]["ht"] is True and ht[0]["hg"] == 0
+    pen = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=90, hg=1, ag=1, period=2, ht=False),
+        _row("s365", "Arsenal", "Chelsea", minute=None, hg=1, ag=1, period=5, ht=False),
+    ])
+    assert pen[0]["period"] == 5 and pen[0]["hg"] == 1 and pen[0]["ht"] is not True
+    et = ex.merge([
+        _row("espn", "Arsenal", "Chelsea", minute=100, hg=1, ag=1, period=2),
+        _row("sofa", "Arsenal", "Chelsea", minute=95, hg=2, ag=1, period=3),
+    ])
+    assert et[0]["hg"] == 2 and et[0]["ag"] == 1 and et[0]["period"] == 3 and et[0]["minute"] == 100

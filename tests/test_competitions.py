@@ -91,6 +91,13 @@ def test_category_suffix_keeps_english_lower_leagues():
     assert youth["segment"] == "youth"
     nwsl = competitions.classify({"src": "s365", "competition_id": 5566, "country_name": "USA", "label": "NWSL"})
     assert nwsl["region"] == "other" and nwsl["country"] == "usa" and nwsl["segment"] == "women"
+    chivas_w = competitions.classify({
+        "src": "s365", "country_name": "Mexico", "home": "Guadalajara Chivas (W)", "away": "Necaxa (W)",
+        "label": "Liga MX",
+    })
+    assert chivas_w["segment"] == "women"
+    assert competitions.classify({"src": "s365", "country_name": "Trinidad and Tobago", "home": "W Connection", "away": "Defence Force"})["segment"] == "main"
+    assert competitions.classify({"src": "espn", "slug": "eng.1", "home": "Wolves", "away": "Leeds"})["segment"] == "main"
     ncaa = competitions.classify({
         "src": "sofa", "country_name": "USA", "label": "NCAA III, Upper Midwest Athletic Conference",
         "home": "Crown Polars", "away": "Martin Luther Knights",

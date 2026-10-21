@@ -338,6 +338,17 @@ assert.strictEqual(F.canon('Peterborough United'), 'peterboro');
 assert.strictEqual(F.canon('Bristol Rovers'), 'bristol rvs');
 assert.strictEqual(F.canon('Athletic Club'), 'athletic bilbao');
 assert.strictEqual(F.canon('Charlton Athletic'), 'charlton athletic');
+assert.strictEqual(F.canon('Chivas'), 'guadalajara chivas');
+assert.strictEqual(F.canon('Guadalajara'), 'guadalajara chivas');
+assert.strictEqual(F.canon('Deportivo Guadalajara'), 'deportivo guadalajara');
+assert.strictEqual(F.canon('MK Dons'), 'milton keynes dons');
+assert.strictEqual(F.canon('Atlético-MG'), 'atletico mg');
+assert.strictEqual(F.canon('Atlético Mineiro'), 'atletico mg');
+assert.strictEqual(F.canon('U. La Calera'), 'union la calera');
+assert.strictEqual(F.canon('Central Córdoba SdE'), 'central cordoba sde');
+assert.strictEqual(F.canon('Central Córdoba (Santiago del Estero)'), 'central cordoba sde');
+assert.strictEqual(F.classify({ src: 's365', country_name: 'Mexico', home: 'Guadalajara Chivas (W)', away: 'Necaxa (W)', label: 'Liga MX' }).segment, 'women');
+assert.strictEqual(F.classify({ src: 's365', country_name: 'Trinidad and Tobago', home: 'W Connection', away: 'Defence Force' }).segment, 'main');
 const elo = [
   { id: 'club:eng:manchester united', n: 1373, elo: 1800 },
   { id: 'club:eng:manchester city', n: 1454, elo: 1850 },
@@ -436,13 +447,146 @@ const folded = F.dedupeMatches([gilloise, gilloise2]);
 assert.strictEqual(folded.length, 1);
 assert.ok(folded[0]._ids.indexOf('sofa:1') >= 0 && folded[0]._ids.indexOf('s365:2') >= 0);
 assert.strictEqual(folded[0].hg, 1);
-const reversed = { id: 'espn:3', ts: 1000, status: 'live', minute: 20, hg: 0, ag: 4, teams: [{ name: 'Hapoel Beer Sheva' }, { name: 'Union St. Gilloise' }] };
+const reversed = { id: 'espn:3', ts: 1000, status: 'live', minute: 20, hg: 0, ag: 1, teams: [{ name: 'Hapoel Beer Sheva' }, { name: 'Union St. Gilloise' }] };
 const keptSide = F.dedupeMatches([gilloise, reversed]);
 assert.strictEqual(keptSide.length, 1);
 assert.strictEqual(keptSide[0].hg, 1);
 assert.strictEqual(keptSide[0].ag, 0);
 assert.strictEqual(keptSide[0].teams[0].name, 'Union St.-Gilloise');
+const further = { id: 'espn:4', ts: 1000, status: 'live', minute: 20, hg: 0, ag: 4, teams: [{ name: 'Hapoel Beer Sheva' }, { name: 'Union St. Gilloise' }] };
+const takenSide = F.dedupeMatches([gilloise, further]);
+assert.strictEqual(takenSide.length, 1);
+assert.strictEqual(takenSide[0].hg, 4);
+assert.strictEqual(takenSide[0].ag, 0);
+assert.strictEqual(takenSide[0].teams[0].name, 'Union St.-Gilloise');
 assert.strictEqual(F.dedupeMatches([gilloise, { id: 'x', ts: 1000, teams: [{ name: 'Arsenal' }, { name: 'Chelsea' }] }]).length, 2);
+function card(id, home, away, extra) {
+  return Object.assign({ id, ts: 5000, status: 'live', minute: 10, hg: 0, ag: 0, segment: 'main', teams: [{ name: home }, { name: away }] }, extra);
+}
+const chivas = F.dedupeMatches([
+  card('espn:g', 'Guadalajara', 'Necaxa', { minute: 11, hg: 0, ag: 0, pred_low: true }),
+  card('s365:g', 'Chivas', 'Necaxa', { minute: 30, hg: 1, ag: 0, pred_low: false, pred: { h: 0.5, d: 0.3, a: 0.2 } }),
+]);
+assert.strictEqual(chivas.length, 1);
+assert.strictEqual(chivas[0].hg, 1);
+assert.strictEqual(chivas[0].minute, 30);
+assert.strictEqual(chivas[0].pred_low, false);
+assert.ok(chivas[0]._ids.indexOf('espn:g') >= 0 && chivas[0]._ids.indexOf('s365:g') >= 0);
+assert.strictEqual(F.dedupeMatches([
+  card('espn:g', 'Guadalajara', 'Necaxa'),
+  card('s365:w', 'Guadalajara Chivas (W)', 'Necaxa (W)', { segment: 'women', ts: 5000 + 10740 }),
+]).length, 2);
+assert.strictEqual(F.dedupeMatches([
+  card('espn:g', 'Guadalajara', 'Necaxa'),
+  card('s365:w', 'Guadalajara Chivas (W)', 'Necaxa (W)', { ts: 5000 + 10740 }),
+]).length, 2);
+assert.strictEqual(F.dedupeMatches([
+  card('espn:dep', 'Deportivo Guadalajara', 'Necaxa'),
+  card('s365:chi', 'Chivas', 'Necaxa'),
+]).length, 2);
+assert.strictEqual(F.dedupeMatches([
+  card('a', 'Blackpool', 'Milton Keynes Dons'),
+  card('b', 'Blackpool', 'MK Dons'),
+]).length, 1);
+assert.strictEqual(F.dedupeMatches([
+  card('a', 'Sanfrecce Hiroshima', 'Kyoto Sanga'),
+  card('b', 'Hiroshima Sanfrecce', 'Kyoto'),
+]).length, 1);
+assert.strictEqual(F.dedupeMatches([
+  card('a', 'Avispa Fukuoka', 'Fagiano Okayama'),
+  card('b', 'Fukuoka', 'Okayama'),
+]).length, 1);
+const youthLive = card('sofa:c', 'Criciúma U20', 'Flamengo U20', { segment: 'youth', status: 'live', minute: 91, hg: 0, ag: 2 });
+const youthFt = card('s365:c', 'Criciúma/Sc Youth', 'Flamengo/RJ Youth', { segment: 'youth', status: 'finished', minute: null, hg: 0, ag: 2 });
+const youth = F.dedupeMatches([youthFt, youthLive]);
+assert.strictEqual(youth.length, 1);
+assert.strictEqual(youth[0].status, 'live');
+assert.strictEqual(youth[0].minute, 91);
+assert.strictEqual(youth[0].ag, 2);
+const youthGoal = F.dedupeMatches([youthLive, card('s365:c2', 'Criciúma/Sc Youth', 'Flamengo/RJ Youth', { segment: 'youth', status: 'finished', minute: null, hg: 0, ag: 3 })]);
+assert.strictEqual(youthGoal[0].status, 'finished');
+assert.strictEqual(youthGoal[0].ag, 3);
+const staleFt = F.dedupeMatches([
+  card('ft', 'Blackpool', 'MK Dons', { status: 'finished', minute: null, hg: 0, ag: 0 }),
+  card('lv', 'Blackpool', 'Milton Keynes Dons', { status: 'live', minute: 50, hg: 1, ag: 0 }),
+]);
+assert.strictEqual(staleFt[0].hg, 1);
+assert.strictEqual(staleFt[0].status, 'live');
+const missed = F.dedupeMatches([
+  card('late', 'Avispa Fukuoka', 'Okayama', { minute: 70, hg: 1, ag: 0 }),
+  card('goals', 'Fukuoka', 'Okayama', { minute: 40, hg: 2, ag: 0 }),
+]);
+assert.strictEqual(missed[0].hg, 2);
+assert.strictEqual(missed[0].minute, 70);
+assert.strictEqual(F.dedupeMatches([
+  card('u', 'Manchester United', 'Chelsea'),
+  card('c', 'Manchester City', 'Chelsea'),
+]).length, 2);
+assert.strictEqual(F.dedupeMatches([
+  card('a', "Hapoel Ra'anana", 'Maccabi Haifa'),
+  card('b', 'Hapoel Afula', 'Maccabi Haifa'),
+]).length, 2);
+assert.strictEqual(F.dedupeMatches([
+  card('a', 'Arsenal', 'Chelsea', { ts: 1000 }),
+  card('b', 'Arsenal', 'Chelsea', { ts: 1000 + 3 * 3600, hg: 1 }),
+]).length, 2);
+assert.strictEqual(F.dedupeMatches([
+  card('a', 'Real Madrid', 'Getafe'),
+  card('b', 'Real', 'Getafe'),
+]).length, 2);
+const postponed = F.dedupeMatches([
+  card('espn:p', 'Universidad de Chile', 'Antofagasta', { status: 'upcoming', hg: null, ag: null, minute: null }),
+  card('s365:p', 'Universidad de Chile', 'Deportes Antofagasta', { status: 'postponed', hg: null, ag: null, minute: null }),
+]);
+assert.strictEqual(postponed.length, 1);
+assert.strictEqual(postponed[0].status, 'postponed');
+const stillLive = F.dedupeMatches([
+  card('espn:l', 'Arsenal', 'Chelsea', { status: 'live', minute: 20, hg: 1, ag: 0 }),
+  card('s365:l', 'Arsenal', 'Chelsea', { status: 'postponed', hg: null, ag: null, minute: null }),
+]);
+assert.strictEqual(stillLive[0].status, 'live');
+assert.strictEqual(stillLive[0].hg, 1);
+const htFold = F.dedupeMatches([
+  card('ht1', 'Arsenal', 'Chelsea', { minute: 40, hg: 0, ag: 0, period: 1, ht: false }),
+  card('ht2', 'Arsenal', 'Chelsea', { minute: null, hg: 0, ag: 0, period: 1, ht: true, ssid: '99' }),
+]);
+assert.strictEqual(htFold.length, 1);
+assert.strictEqual(htFold[0].ht, true);
+assert.strictEqual(htFold[0].ssid, '99');
+assert.strictEqual(F.clockText(htFold[0]), 'HT');
+const penFold = F.dedupeMatches([
+  card('pen1', 'Arsenal', 'Chelsea', { minute: 90, hg: 1, ag: 1, period: 2, ht: false }),
+  card('pen2', 'Arsenal', 'Chelsea', { minute: null, hg: 1, ag: 1, period: 5, ht: false }),
+]);
+assert.strictEqual(penFold[0].period, 5);
+assert.strictEqual(penFold[0].hg, 1);
+assert.strictEqual(F.clockText(penFold[0]), 'PEN');
+const etFold = F.dedupeMatches([
+  card('et1', 'Arsenal', 'Chelsea', { minute: 100, hg: 1, ag: 1, period: 2 }),
+  card('et2', 'Arsenal', 'Chelsea', { minute: 95, hg: 2, ag: 1, period: 3 }),
+]);
+assert.strictEqual(etFold[0].hg, 2);
+assert.strictEqual(etFold[0].ag, 1);
+assert.strictEqual(etFold[0].period, 3);
+assert.strictEqual(etFold[0].minute, 100);
+assert.strictEqual(F.clockText(etFold[0]), "100' ET");
+const goalPeriod = { status: 'live', hg: 1, ag: 0, minute: 60, period: 2, ht: false, pred: { h: 0.5, d: 0.3, a: 0.2 }, lam: [1.2, 0.8] };
+assert.strictEqual(F.applyLive(goalPeriod, { status: 'live', hg: 2, ag: 0, minute: 70, period: 1 }), true);
+assert.strictEqual(goalPeriod.hg, 2);
+assert.strictEqual(goalPeriod.minute, 70);
+assert.strictEqual(goalPeriod.period, 2);
+assert.ok(goalPeriod.live && goalPeriod.live.p.h > 0.5);
+const pensUp = { status: 'live', hg: 1, ag: 1, minute: 90, period: 2, pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1, 1] };
+assert.strictEqual(F.applyLive(pensUp, { status: 'live', hg: 1, ag: 1, minute: 0, period: 5 }), true);
+assert.strictEqual(pensUp.period, 5);
+assert.strictEqual(pensUp.minute, 90);
+assert.strictEqual(F.clockText(pensUp), 'PEN');
+const stalePred = card('sp', 'Arsenal', 'Chelsea', { minute: 20, hg: 0, ag: 0, period: 1, pred: { h: 0.4, d: 0.3, a: 0.3 }, lam: [1.4, 1.1], pred_low: false });
+F.liveCalc(stalePred);
+const beforeH = stalePred.live.p.h;
+const movedPred = F.dedupeMatches([stalePred, card('sp2', 'Arsenal', 'Chelsea', { minute: 20, hg: 1, ag: 0, period: 1 })]);
+assert.strictEqual(movedPred[0].hg, 1);
+assert.ok(movedPred[0].live && movedPred[0].live.p.h > beforeH);
 assert.strictEqual(F.listVisible({ id: 'keep', _ids: ['keep', 'drop'], region: 'europe_top', status: 'live', day: 0, segment: 'main' }, { view: 'oblibene', fav: ['drop'] }), true);
 const pages = fs.readFileSync(path.join(__dirname, '../.github/workflows/pages.yml'), 'utf8');
 assert.ok(pages.includes("github.event_name == 'push'"));
